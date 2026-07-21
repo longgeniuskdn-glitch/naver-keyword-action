@@ -1,0 +1,62 @@
+openapi: 3.1.0
+info:
+  title: NAVER Keyword Signal API
+  version: 1.0.0
+  description: >
+    네이버 검색광고의 월간 키워드 규모와 NAVER API HUB의 일간 검색 추이,
+    블로그·뉴스 최신 문서 흐름을 함께 조회합니다.
+servers:
+  - url: https://YOUR-VERCEL-DOMAIN.vercel.app
+paths:
+  /api/analyze:
+    post:
+      operationId: analyzeNaverKeywords
+      summary: 네이버 키워드 최신 신호 분석
+      description: >
+        최대 5개 키워드의 월간 검색 규모, 일간 상대 추이, 최근 블로그·뉴스
+        문서 흐름과 연관 키워드를 조회합니다.
+      security:
+        - AnalyzerKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - keywords
+              properties:
+                keywords:
+                  type: array
+                  minItems: 1
+                  maxItems: 5
+                  items:
+                    type: string
+                  description: 분석할 한국어 검색 키워드
+                trendDays:
+                  type: integer
+                  minimum: 30
+                  maximum: 365
+                  default: 90
+                  description: 일간 검색 추이를 조회할 기간
+      responses:
+        "200":
+          description: 분석 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          description: 잘못된 요청
+        "401":
+          description: 인증 실패
+        "500":
+          description: 서버 또는 외부 API 오류
+components:
+  securitySchemes:
+    AnalyzerKey:
+      type: apiKey
+      in: header
+      name: X-Analyzer-Key
