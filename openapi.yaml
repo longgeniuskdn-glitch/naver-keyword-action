@@ -6,7 +6,7 @@ info:
     네이버 검색광고의 월간 키워드 규모와 NAVER API HUB의 일간 검색 추이,
     블로그·뉴스 최신 문서 흐름을 함께 조회합니다.
 servers:
-  - url: https://YOUR-VERCEL-DOMAIN.vercel.app
+  - url: https://naver-keyword-action.vercel.app
 paths:
   /api/analyze:
     post:
