@@ -7,6 +7,12 @@ on:
     paths:
       - 'part04_ai_diagnosis/**'
       - '.github/workflows/part04-linux-test.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'part04_ai_diagnosis/**'
+      - '.github/workflows/part04-linux-test.yml'
   workflow_dispatch:
 
 jobs:
