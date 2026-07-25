@@ -15,6 +15,10 @@ on:
       - '.github/workflows/part05-linux-verify.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   verify-and-package:
     runs-on: ubuntu-latest
@@ -22,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          show-progress: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -35,8 +41,33 @@ jobs:
           find . -name '*.pyc' -delete
 
       - name: Run 8 automated tests
+        id: tests
+        continue-on-error: true
         working-directory: part05_intake_classifier
-        run: python3 -m unittest -v test_unittest.py
+        run: |
+          set +e
+          python3 -m unittest -v test_unittest.py > /tmp/part05_tests.log 2>&1
+          TEST_CODE=$?
+          cat /tmp/part05_tests.log
+          exit $TEST_CODE
+
+      - name: Report test failure on PR
+        if: steps.tests.outcome == 'failure' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '## PART 05 Linux test failure'
+            echo
+            echo '```text'
+            cat /tmp/part05_tests.log
+            echo '```'
+          } > /tmp/part05_comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/part05_comment.md
+
+      - name: Stop after failed tests
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
 
       - name: Run preflight
         working-directory: part05_intake_classifier
