@@ -12,9 +12,8 @@
 - 검증일: 2026-07-26
 - 운영체제: Ubuntu 24.04.4 LTS
 - Python: 3.13
-- GitHub Actions run: 30170722498
-- 검증 commit: e6174e92f9c448f84015a6ce056d3eda27b42214
-- 패키지 digest: sha256:d60b1ee1ab3f836428cc859636868454e964fac016de9b723d5ec2002820202a
+- GitHub Actions 성공 이력과 패키지 해시는 저장소의 해당 workflow run에서 확인합니다.
+- 패키지 안에 고정 해시를 적지 않습니다. 문서 한 줄만 바뀌어도 ZIP 해시가 달라져 오래된 값이 될 수 있기 때문입니다.
 
 ## 자동 검증 명령
 
