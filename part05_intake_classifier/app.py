@@ -15,23 +15,20 @@ import io
 import json
 import os
 import re
-import shutil
 import socket
 import sqlite3
 import sys
 import threading
 import time
 import urllib.parse
-import urllib.request
 import webbrowser
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Iterable
 
 APP_TITLE = "업무 접수·분류실"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8795
 
@@ -44,27 +41,28 @@ def app_root() -> Path:
 
 ROOT = app_root()
 DATA_DIR = Path(os.environ.get("INTAKE_DATA_DIR", ROOT / "data"))
-OUTPUT_DIR = Path(os.environ.get("INTAKE_OUTPUT_DIR", ROOT / "output"))
 BACKUP_DIR = Path(os.environ.get("INTAKE_BACKUP_DIR", ROOT / "backups"))
 DB_PATH = Path(os.environ.get("INTAKE_DB", DATA_DIR / "intake.db"))
 
+# 계약·법무를 일반 불만·분쟁보다 먼저 평가합니다. 한 문장에 "계약 분쟁"이
+# 함께 들어와도 사람 직접 처리 대상이 일반 불만으로 낮아지지 않게 합니다.
 CATEGORY_RULES = [
+    ("계약·법무", ("계약", "약관", "법률", "소송", "내용증명")),
     ("환불·취소", ("환불", "취소", "반품", "교환", "보상")),
     ("배송", ("배송", "택배", "출고", "도착", "운송장")),
     ("결제·증빙", ("결제", "카드", "입금", "영수증", "세금계산서", "현금영수증")),
     ("예약·일정", ("예약", "일정", "방문", "상담", "미팅", "시간 변경")),
     ("불만·분쟁", ("불만", "항의", "신고", "분쟁", "피해", "소비자원")),
-    ("계약·법무", ("계약", "약관", "법률", "소송", "내용증명")),
     ("제휴·콘텐츠", ("제휴", "협업", "광고", "콘텐츠", "인터뷰", "원고")),
     ("제품·사용법", ("사용법", "설치", "오류", "작동", "기능", "문의")),
 ]
 TEAM_MAP = {
+    "계약·법무": "대표 검토",
     "환불·취소": "고객지원",
     "배송": "물류",
     "결제·증빙": "회계",
     "예약·일정": "운영",
     "불만·분쟁": "대표 검토",
-    "계약·법무": "대표 검토",
     "제휴·콘텐츠": "마케팅",
     "제품·사용법": "고객지원",
     "기타": "운영",
@@ -122,8 +120,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 """
 
 CSS = """
-:root{--navy:#173b58;--blue:#1669ad;--pale:#edf5fb;--line:#d7e1e8;--green:#21765b;--red:#b23a45;--amber:#9b6500;--text:#24323d;--muted:#65737e}
-*{box-sizing:border-box}body{margin:0;background:#f5f7f9;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Arial,sans-serif;line-height:1.55}header{background:var(--navy);color:#fff;padding:22px 0}.wrap{width:min(1220px,94vw);margin:0 auto}.brand{display:flex;justify-content:space-between;gap:16px;align-items:center}.brand h1{margin:0;font-size:28px}.badge{background:#e9f3ff;color:#084a84;padding:6px 11px;border-radius:999px;font-weight:800;font-size:13px}main{padding:24px 0 60px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}.card{background:white;border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 5px 18px rgba(25,55,78,.05)}.metric strong{display:block;font-size:28px;color:var(--navy)}.metric span{color:var(--muted)}h2{margin:0 0 14px;color:var(--navy);font-size:22px}.section{margin-top:20px}.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.wide{grid-column:span 2}.full{grid-column:1/-1}label{font-size:13px;font-weight:750;color:#405462;display:block;margin-bottom:5px}input,select,textarea{width:100%;border:1px solid #ccd8e0;border-radius:8px;padding:10px 11px;background:#fff;font:inherit}textarea{min-height:100px;resize:vertical}button,.button{display:inline-block;border:0;border-radius:8px;padding:9px 13px;background:var(--blue);color:#fff;font-weight:750;text-decoration:none;cursor:pointer}.button.secondary{background:#657987}.button.green,button.green{background:var(--green)}.button.red,button.red{background:var(--red)}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.notice{padding:12px 14px;border-left:5px solid var(--blue);background:#edf5ff;margin-bottom:15px}.notice.error{border-color:var(--red);background:#fff0f1}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;background:#fff;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top}th{background:var(--navy);color:#fff;position:sticky;top:0}.urgency-high{color:var(--red);font-weight:800}.urgency-medium{color:var(--amber);font-weight:800}.urgency-low{color:var(--green);font-weight:800}.mode-human_only{color:var(--red);font-weight:800}.mode-prepare_only{color:var(--amber);font-weight:800}.mode-standard{color:var(--green);font-weight:800}.muted{color:var(--muted);font-size:13px}.empty{text-align:center;padding:38px;color:var(--muted)}code{background:#edf2f5;padding:2px 5px;border-radius:4px}@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.form-grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+:root{--navy:#173b58;--blue:#1669ad;--line:#d7e1e8;--green:#21765b;--red:#b23a45;--amber:#9b6500;--text:#24323d;--muted:#65737e}
+*{box-sizing:border-box}body{margin:0;background:#f5f7f9;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Arial,sans-serif;line-height:1.55}header{background:var(--navy);color:#fff;padding:22px 0}.wrap{width:min(1220px,94vw);margin:0 auto}.brand{display:flex;justify-content:space-between;gap:16px;align-items:center}.brand h1{margin:0;font-size:28px}.badge{background:#e9f3ff;color:#084a84;padding:6px 11px;border-radius:999px;font-weight:800;font-size:13px}main{padding:24px 0 60px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}.card{background:white;border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 5px 18px rgba(25,55,78,.05)}.metric strong{display:block;font-size:28px;color:var(--navy)}.metric span{color:var(--muted)}h2{margin:0 0 14px;color:var(--navy);font-size:22px}.section{margin-top:20px}.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.wide{grid-column:span 2}.full{grid-column:1/-1}label{font-size:13px;font-weight:750;color:#405462;display:block;margin-bottom:5px}input,select,textarea{width:100%;border:1px solid #ccd8e0;border-radius:8px;padding:10px 11px;background:#fff;font:inherit}textarea{min-height:100px;resize:vertical}button,.button{display:inline-block;border:0;border-radius:8px;padding:9px 13px;background:var(--blue);color:#fff;font-weight:750;text-decoration:none;cursor:pointer}.button.secondary{background:#657987}.button.green,button.green{background:var(--green)}.button.red,button.red{background:var(--red)}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.notice{padding:12px 14px;border-left:5px solid var(--blue);background:#edf5ff;margin-bottom:15px}.notice.error{border-color:var(--red);background:#fff0f1}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;background:#fff;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top}th{background:var(--navy);color:#fff;position:sticky;top:0}.urgency-high{color:var(--red);font-weight:800}.urgency-medium{color:var(--amber);font-weight:800}.urgency-low{color:var(--green);font-weight:800}.mode-human_only{color:var(--red);font-weight:800}.mode-prepare_only{color:var(--amber);font-weight:800}.mode-standard{color:var(--green);font-weight:800}.muted{color:var(--muted);font-size:13px}.empty{text-align:center;padding:38px;color:var(--muted)}@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.form-grid{grid-template-columns:1fr}.wide{grid-column:auto}}
 """
 
 
@@ -136,7 +134,7 @@ def normalize(value: str) -> str:
 
 
 def make_dedupe_hash(channel: str, sender: str, subject: str, body: str) -> str:
-    raw = "|".join(normalize(v) for v in (channel, sender, subject, body))
+    raw = "|".join(normalize(value) for value in (channel, sender, subject, body))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -159,9 +157,10 @@ def classify_intake(subject: str, body: str) -> dict:
     else:
         urgency = "low"
     flags = detect_risk_flags(text)
-    if set(flags).intersection({"contract", "legal"}):
+    flag_set = set(flags)
+    if flag_set.intersection({"contract", "legal"}):
         mode = "human_only"
-    elif urgency == "high" or set(flags).intersection({"refund", "payment", "personal_data", "public_response"}):
+    elif urgency == "high" or flag_set.intersection({"refund", "payment", "personal_data", "public_response"}):
         mode = "prepare_only"
     else:
         mode = "standard"
@@ -221,10 +220,20 @@ def add_intake(data: dict, db_path: Path | str = DB_PATH) -> int:
                 ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
-                    channel, sender, subject, body, dedupe, diagnosis["category"],
-                    diagnosis["urgency"], diagnosis["assigned_team"],
-                    diagnosis["approval_required"], json.dumps(diagnosis["risk_flags"], ensure_ascii=False),
-                    diagnosis["handling_mode"], "triaged", timestamp, timestamp,
+                    channel,
+                    sender,
+                    subject,
+                    body,
+                    dedupe,
+                    diagnosis["category"],
+                    diagnosis["urgency"],
+                    diagnosis["assigned_team"],
+                    diagnosis["approval_required"],
+                    json.dumps(diagnosis["risk_flags"], ensure_ascii=False),
+                    diagnosis["handling_mode"],
+                    "triaged",
+                    timestamp,
+                    timestamp,
                 ),
             )
             intake_id = int(cursor.lastrowid)
@@ -236,18 +245,20 @@ def add_intake(data: dict, db_path: Path | str = DB_PATH) -> int:
 
 def import_csv_text(text: str, db_path: Path | str = DB_PATH) -> dict:
     reader = csv.DictReader(io.StringIO(text.strip()))
-    required = {"subject", "body"}
-    if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
+    if not reader.fieldnames or not {"subject", "body"}.issubset(set(reader.fieldnames)):
         raise ValueError("CSV 첫 줄에 subject,body 열이 필요합니다. channel과 sender는 선택입니다.")
     inserted = duplicates = errors = 0
     for row in reader:
         try:
-            add_intake({
-                "channel": row.get("channel") or "csv",
-                "sender": row.get("sender") or "",
-                "subject": row.get("subject") or "",
-                "body": row.get("body") or "",
-            }, db_path)
+            add_intake(
+                {
+                    "channel": row.get("channel") or "csv",
+                    "sender": row.get("sender") or "",
+                    "subject": row.get("subject") or "",
+                    "body": row.get("body") or "",
+                },
+                db_path,
+            )
             inserted += 1
         except ValueError as exc:
             if "이미 접수" in str(exc):
@@ -271,8 +282,7 @@ def get_intake(intake_id: int, db_path: Path | str = DB_PATH) -> sqlite3.Row | N
 
 
 def change_status(intake_id: int, status: str, db_path: Path | str = DB_PATH) -> None:
-    allowed = {"approved", "rejected", "done"}
-    if status not in allowed:
+    if status not in {"approved", "rejected", "done"}:
         raise ValueError("허용되지 않은 상태입니다.")
     row = get_intake(intake_id, db_path)
     if row is None:
@@ -288,11 +298,13 @@ def summary(db_path: Path | str = DB_PATH) -> dict:
     init_db(db_path)
     with connect(db_path) as conn:
         row = conn.execute(
-            """SELECT COUNT(*) total,
-               SUM(CASE WHEN urgency='high' THEN 1 ELSE 0 END) high_count,
-               SUM(CASE WHEN handling_mode='human_only' THEN 1 ELSE 0 END) human_count,
-               SUM(CASE WHEN status='triaged' THEN 1 ELSE 0 END) pending_count
-               FROM intakes"""
+            """
+            SELECT COUNT(*) total,
+                   SUM(CASE WHEN urgency='high' THEN 1 ELSE 0 END) high_count,
+                   SUM(CASE WHEN handling_mode='human_only' THEN 1 ELSE 0 END) human_count,
+                   SUM(CASE WHEN status='triaged' THEN 1 ELSE 0 END) pending_count
+            FROM intakes
+            """
         ).fetchone()
     return {key: row[key] or 0 for key in row.keys()}
 
@@ -310,11 +322,21 @@ def export_csv_bytes(db_path: Path | str = DB_PATH) -> bytes:
     writer = csv.writer(output)
     writer.writerow(["id", "channel", "sender", "subject", "category", "urgency", "assigned_team", "handling_mode", "risk_flags", "status", "created_at"])
     for row in list_intakes(db_path):
-        writer.writerow([
-            row["id"], row["channel"], row["sender"], row["subject"], row["category"],
-            row["urgency"], row["assigned_team"], row["handling_mode"],
-            flag_text(row["risk_flags"]), row["status"], row["created_at"],
-        ])
+        writer.writerow(
+            [
+                row["id"],
+                row["channel"],
+                row["sender"],
+                row["subject"],
+                row["category"],
+                row["urgency"],
+                row["assigned_team"],
+                row["handling_mode"],
+                flag_text(row["risk_flags"]),
+                row["status"],
+                row["created_at"],
+            ]
+        )
     return ("\ufeff" + output.getvalue()).encode("utf-8")
 
 
@@ -336,20 +358,22 @@ def insert_demo(db_path: Path | str = DB_PATH) -> int:
 
 
 def create_backup(db_path: Path | str = DB_PATH, backup_dir: Path | str = BACKUP_DIR) -> Path:
+    """SQLite backup API로 WAL을 포함한 일관된 백업을 만듭니다."""
     init_db(db_path)
-    source = Path(db_path)
+    source_path = Path(db_path)
     target_dir = Path(backup_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"intake_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.db"
-    with connect(db_path) as conn:
-        conn.execute("PRAGMA wal_checkpoint(FULL)")
-    shutil.copy2(source, target)
-    with connect(db_path) as conn:
+    with connect(source_path) as source_conn:
+        with sqlite3.connect(target) as target_conn:
+            source_conn.backup(target_conn)
+    with connect(source_path) as conn:
         log_action(conn, None, "backup_created", str(target))
     return target
 
 
 def restore_backup(backup_path: Path | str, db_path: Path | str = DB_PATH) -> Path:
+    """백업 DB를 SQLite backup API로 복구합니다."""
     backup = Path(backup_path)
     destination = Path(db_path)
     if not backup.exists():
@@ -357,8 +381,16 @@ def restore_backup(backup_path: Path | str, db_path: Path | str = DB_PATH) -> Pa
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
         safety = destination.with_name(f"{destination.stem}_before_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
-        shutil.copy2(destination, safety)
-    shutil.copy2(backup, destination)
+        with sqlite3.connect(destination) as source_conn:
+            with sqlite3.connect(safety) as safety_conn:
+                source_conn.backup(safety_conn)
+    for suffix in ("", "-wal", "-shm"):
+        candidate = Path(str(destination) + suffix)
+        if candidate.exists():
+            candidate.unlink()
+    with sqlite3.connect(backup) as source_conn:
+        with sqlite3.connect(destination) as destination_conn:
+            source_conn.backup(destination_conn)
     init_db(destination)
     with connect(destination) as conn:
         log_action(conn, None, "backup_restored", str(backup))
@@ -430,14 +462,17 @@ def render_home(db_path: Path | str = DB_PATH, notice: str = "", error: bool = F
             actions = f"<form method='post' action='/approve/{row['id']}' style='display:inline'><button class='green'>분류 승인</button></form> <form method='post' action='/reject/{row['id']}' style='display:inline'><button class='red'>보류</button></form>"
         elif row["status"] == "approved":
             actions = f"<form method='post' action='/done/{row['id']}' style='display:inline'><button>완료</button></form>"
-        table_rows.append(f"""
+        table_rows.append(
+            f"""
 <tr><td><strong>{escape(row['subject'])}</strong><div class='muted'>{escape(row['channel'])} · {escape(row['sender'])}</div><div>{escape(row['body'][:120])}</div></td>
 <td>{escape(row['category'])}<div class='muted'>{escape(row['assigned_team'])}</div></td>
 <td class='urgency-{row['urgency']}'>{row['urgency']}</td>
 <td class='mode-{row['handling_mode']}'>{MODE_LABELS[row['handling_mode']]}<div class='muted'>{escape(flag_text(row['risk_flags']))}</div></td>
-<td>{escape(row['status'])}</td><td>{actions}</td></tr>""")
-    body = "".join(table_rows) if table_rows else "<tr><td colspan='6' class='empty'>접수된 업무가 없습니다. 샘플을 넣거나 첫 업무를 등록하세요.</td></tr>"
-    return layout(f"""
+<td>{escape(row['status'])}</td><td>{actions}</td></tr>"""
+        )
+    table_body = "".join(table_rows) if table_rows else "<tr><td colspan='6' class='empty'>접수된 업무가 없습니다. 샘플을 넣거나 첫 업무를 등록하세요.</td></tr>"
+    return layout(
+        f"""
 {notice_html}<div class='grid'>
 <div class='card metric'><strong>{stats['total']}</strong><span>전체 접수</span></div>
 <div class='card metric'><strong>{stats['pending_count']}</strong><span>승인 대기</span></div>
@@ -452,8 +487,9 @@ def render_home(db_path: Path | str = DB_PATH, notice: str = "", error: bool = F
 <div class='full'><button type='submit'>접수하고 분류</button></div></div></form></div>
 <div class='section card'><h2>CSV 붙여넣기</h2><div class='muted'>첫 줄: channel,sender,subject,body · subject와 body는 필수입니다.</div><form method='post' action='/import'><textarea name='csv_text' placeholder='channel,sender,subject,body&#10;email,user@example.com,배송 문의,운송장 조회가 안 됩니다'></textarea><button type='submit'>CSV 가져오기</button></form></div>
 <div class='section card'><h2>분류 대기열</h2><div class='toolbar'><a class='button secondary' href='/demo'>샘플 넣기</a><a class='button secondary' href='/export.csv'>CSV 내보내기</a><a class='button secondary' href='/backup'>DB 백업</a><a class='button red' href='/reset' onclick="return confirm('모든 데이터를 초기화할까요?')">초기화</a></div>
-<div class='table-wrap'><table><thead><tr><th>접수 내용</th><th>분류·담당</th><th>긴급도</th><th>처리 모드·위험</th><th>상태</th><th>결정</th></tr></thead><tbody>{body}</tbody></table></div></div>
-""")
+<div class='table-wrap'><table><thead><tr><th>접수 내용</th><th>분류·담당</th><th>긴급도</th><th>처리 모드·위험</th><th>상태</th><th>결정</th></tr></thead><tbody>{table_body}</tbody></table></div></div>
+"""
+    )
 
 
 class AppHandler(BaseHTTPRequestHandler):
@@ -491,7 +527,8 @@ class AppHandler(BaseHTTPRequestHandler):
         path = parsed.path
         query = urllib.parse.parse_qs(parsed.query)
         if path == "/health":
-            self.send_bytes(json.dumps({"ok": True, "app": APP_TITLE, "version": APP_VERSION}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            body = json.dumps({"ok": True, "app": APP_TITLE, "version": APP_VERSION}, ensure_ascii=False).encode("utf-8")
+            self.send_bytes(body, "application/json; charset=utf-8")
             return
         if path == "/export.csv":
             self.send_bytes(export_csv_bytes(self.db_path), "text/csv; charset=utf-8", filename="intake_queue.csv")
@@ -541,7 +578,12 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_error(404)
 
 
-def create_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, db_path: Path | str = DB_PATH, backup_dir: Path | str = BACKUP_DIR) -> ThreadingHTTPServer:
+def create_server(
+    host: str = DEFAULT_HOST,
+    port: int = DEFAULT_PORT,
+    db_path: Path | str = DB_PATH,
+    backup_dir: Path | str = BACKUP_DIR,
+) -> ThreadingHTTPServer:
     init_db(db_path)
     server = ThreadingHTTPServer((host, port), AppHandler)
     server.db_path = str(db_path)  # type: ignore[attr-defined]
@@ -553,6 +595,7 @@ def open_browser_later(url: str) -> None:
     def _open() -> None:
         time.sleep(0.7)
         webbrowser.open(url)
+
     threading.Thread(target=_open, daemon=True).start()
 
 
