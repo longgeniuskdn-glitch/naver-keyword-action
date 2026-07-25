@@ -14,7 +14,7 @@ class Part04Tests(unittest.TestCase):
         with self.assertRaises(ValueError):app.add(d,db)
     def test_03_approve_and_brief(self):
         _,db,out,_=self.paths();app.add({'name':'콘텐츠 재가공','category':'콘텐츠','frequency':5,'time':4,'regularity':5,'review':5,'risk':2,'effort':2,'input':'원고','output':'SNS 초안','flags':[]},db)
-        p=app.approve(app.tasks(db)[0]['id'],db,out);self.assertTrue(p.exists());self.assertIn('첫 10건',p.read_text(encoding='utf-8'))
+        p=app.approve(app.tasks(db)[0]['id'],db,out);self.assertTrue(p.exists());self.assertIn('처음 10건',p.read_text(encoding='utf-8'))
     def test_04_human_only_rejected(self):
         _,db,out,_=self.paths();app.add({'name':'계약 확정','frequency':3,'time':3,'regularity':3,'review':1,'risk':5,'effort':3,'flags':['contract']},db)
         with self.assertRaises(ValueError):app.approve(app.tasks(db)[0]['id'],db,out)
