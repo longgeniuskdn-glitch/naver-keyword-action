@@ -1,0 +1,92 @@
+name: PART 04 Linux Test
+
+on:
+  push:
+    branches:
+      - part04-ai-diagnosis
+    paths:
+      - 'part04_ai_diagnosis/**'
+      - '.github/workflows/part04-linux-test.yml'
+  workflow_dispatch:
+
+jobs:
+  linux-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Clean extraction simulation
+        run: |
+          mkdir -p /tmp/part04_clean
+          cp -R part04_ai_diagnosis/. /tmp/part04_clean/
+          rm -rf /tmp/part04_clean/data /tmp/part04_clean/output /tmp/part04_clean/backups /tmp/part04_clean/__pycache__
+
+      - name: Run tests
+        working-directory: /tmp/part04_clean
+        run: python3 -m unittest -v test_unittest.py
+
+      - name: Run preflight
+        working-directory: /tmp/part04_clean
+        run: python3 app.py --preflight
+
+      - name: Start server and verify workflow
+        working-directory: /tmp/part04_clean
+        run: |
+          python3 app.py --no-browser > server.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          sleep 2
+          python3 - <<'PY'
+          import urllib.parse, urllib.request
+          base='http://127.0.0.1:8794'
+          assert b'"ok": true' in urllib.request.urlopen(base+'/health', timeout=5).read()
+          data=urllib.parse.urlencode({
+              'name':'CI 문의 분류',
+              'category':'고객응대',
+              'frequency':'5',
+              'time':'4',
+              'regularity':'5',
+              'review':'5',
+              'risk':'2',
+              'effort':'2',
+              'minutes':'600',
+              'hourly':'30000',
+              'error_cost':'0',
+              'tool_cost':'0',
+              'input':'문의 CSV와 정책',
+              'output':'분류표와 답변 초안',
+              'flags':'public_post'
+          }).encode()
+          req=urllib.request.Request(base+'/tasks', data=data, method='POST')
+          opener=urllib.request.build_opener(urllib.request.HTTPRedirectHandler())
+          page=opener.open(req, timeout=5).read()
+          assert 'CI 문의 분류'.encode('utf-8') in page
+          PY
+
+      - name: Verify backup and restore
+        working-directory: /tmp/part04_clean
+        run: |
+          BACKUP=$(python3 app.py --backup)
+          test -f "$BACKUP"
+          python3 app.py --restore "$BACKUP"
+          python3 - <<'PY'
+          import app
+          assert len(app.tasks()) >= 1
+          PY
+
+      - name: Package ZIP
+        run: |
+          cd /tmp
+          zip -r part04_ai_diagnosis_v1.zip part04_clean -x '*/__pycache__/*' '*/data/*' '*/output/*' '*/backups/*'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: part04-ai-diagnosis-linux-tested
+          path: /tmp/part04_ai_diagnosis_v1.zip
