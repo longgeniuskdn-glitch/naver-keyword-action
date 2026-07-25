@@ -1,5 +1,31 @@
 # CHANGELOG
 
+## 1.0.1 — 2026-07-26
+
+### Fixed
+
+- `계약 분쟁` 문장에서 일반 `분쟁` 규칙이 먼저 적용되어 `불만·분쟁`으로 낮아지던 문제를 수정했습니다.
+- `계약·법무` 규칙을 일반 불만보다 먼저 평가하도록 우선순위를 변경했습니다.
+- WAL 모드 SQLite 데이터베이스를 단순 파일 복사해 최신 접수 데이터가 백업되지 않던 문제를 수정했습니다.
+- 백업과 복구를 SQLite connection backup API 방식으로 변경했습니다.
+
+### Verified on Linux
+
+- Ubuntu 24.04
+- Python 3.13
+- 8개 자동 테스트 통과
+- 사전 점검 통과
+- 로컬 서버와 `/health` 통과
+- 샘플 4건 등록 통과
+- DB 삭제 후 백업 복구 4건 확인
+- DB·캐시를 제외한 단일 압축 배포 폴더 생성 통과
+
+### Still requires user-device verification
+
+- 실제 사용자 macOS 첫 실행과 보안 경고
+- 실제 사용자 Windows 첫 실행과 Python 설치 상태
+- 외부 이메일·문의폼 읽기 전용 연결
+
 ## 1.0.0 — 2026-07-26
 
 ### Added
@@ -17,12 +43,6 @@
 - Mac·Windows 실행기
 - 8개 unittest
 - 모델 독립형 코딩 AI 가이드
-
-### Not verified yet
-
-- 실제 사용자 macOS 첫 실행
-- 실제 사용자 Windows 첫 실행
-- 외부 이메일·문의폼 연결
 
 ### Out of scope
 
