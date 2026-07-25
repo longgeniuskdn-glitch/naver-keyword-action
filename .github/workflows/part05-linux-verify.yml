@@ -106,20 +106,21 @@ jobs:
           print('restore_count=4')
           PY
 
-      - name: Build clean ZIP
+      - name: Build clean package folder
         run: |
           rm -rf package
           mkdir -p package/PART05_업무_접수_분류실_v1
           rsync -a --exclude 'data/' --exclude 'backups/' --exclude 'output/' --exclude '__pycache__/' --exclude '*.pyc' part05_intake_classifier/ package/PART05_업무_접수_분류실_v1/
           mkdir -p package/PART05_업무_접수_분류실_v1/data package/PART05_업무_접수_분류실_v1/backups package/PART05_업무_접수_분류실_v1/output
           chmod +x package/PART05_업무_접수_분류실_v1/START_MAC.command
-          cd package
-          zip -r ../PART05_업무_접수_분류실_Linux검증_v1.zip PART05_업무_접수_분류실_v1
+          test ! -e package/PART05_업무_접수_분류실_v1/data/intake.db
+          test -z "$(find package/PART05_업무_접수_분류실_v1 -name '*.pyc' -o -name '__pycache__')"
 
-      - name: Upload verified ZIP
+      - name: Upload verified package
         uses: actions/upload-artifact@v4
         with:
           name: PART05-intake-classifier-linux-verified
-          path: PART05_업무_접수_분류실_Linux검증_v1.zip
+          path: package/PART05_업무_접수_분류실_v1
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 30
