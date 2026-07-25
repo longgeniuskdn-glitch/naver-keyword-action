@@ -7,6 +7,12 @@ on:
     paths:
       - 'part05_intake_classifier/**'
       - '.github/workflows/part05-linux-verify.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'part05_intake_classifier/**'
+      - '.github/workflows/part05-linux-verify.yml'
   workflow_dispatch:
 
 jobs:
