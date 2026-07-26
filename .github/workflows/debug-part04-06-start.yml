@@ -1,0 +1,84 @@
+name: Debug PART 04-06 App Start
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/debug-part04-06-start.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Download launcher v0.4
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-operations-launcher-v04-part05-direct-learning
+          path: .demo/bundle
+          repository: ${{ github.repository }}
+          run-id: 30200476544
+          github-token: ${{ github.token }}
+      - name: Locate and start apps
+        shell: bash
+        run: |
+          set +e
+          mkdir -p .demo/runtime .demo/logs
+          echo "=== FILE TREE ==="
+          find .demo/bundle -maxdepth 4 -type f | sort | head -120
+          P4_APP="$(find .demo/bundle -path '*/modules/part04/app.py' -print -quit)"
+          P5_APP="$(find .demo/bundle -path '*/modules/part05/app.py' -print -quit)"
+          P6_APP="$(find .demo/bundle -path '*/modules/part06/app.py' -print -quit)"
+          echo "P4=$P4_APP"
+          echo "P5=$P5_APP"
+          echo "P6=$P6_APP"
+
+          (
+            cd "$(dirname "$P4_APP")" || exit 91
+            env AI_DIAGNOSIS_DATA="$GITHUB_WORKSPACE/.demo/runtime/part04/data" \
+                AI_DIAGNOSIS_OUTPUT="$GITHUB_WORKSPACE/.demo/runtime/part04/output" \
+                AI_DIAGNOSIS_BACKUP="$GITHUB_WORKSPACE/.demo/runtime/part04/backups" \
+                AUTO_OPEN_BROWSER=0 python app.py --no-browser
+          ) >.demo/logs/part04.log 2>&1 & PID4=$!
+
+          (
+            cd "$(dirname "$P5_APP")" || exit 92
+            env INTAKE_DATA_DIR="$GITHUB_WORKSPACE/.demo/runtime/part05/data" \
+                INTAKE_BACKUP_DIR="$GITHUB_WORKSPACE/.demo/runtime/part05/backups" \
+                INTAKE_DB="$GITHUB_WORKSPACE/.demo/runtime/part05/data/intake.db" \
+                AI_FEEDBACK_DB="$GITHUB_WORKSPACE/.demo/runtime/shared/feedback.db" \
+                AI_MEMORY_ROOT="$GITHUB_WORKSPACE/.demo/runtime/shared/memory" \
+                INTAKE_QUIET=1 AUTO_OPEN_BROWSER=0 python app.py --no-browser
+          ) >.demo/logs/part05.log 2>&1 & PID5=$!
+
+          (
+            cd "$(dirname "$P6_APP")" || exit 93
+            env KNOWLEDGE_DATA_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/data" \
+                KNOWLEDGE_SOURCE_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/knowledge" \
+                KNOWLEDGE_OUTPUT_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/output" \
+                KNOWLEDGE_BACKUP_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/backups" \
+                KNOWLEDGE_DB="$GITHUB_WORKSPACE/.demo/runtime/part06/data/knowledge.db" \
+                AI_COMPANY_EVENT_LOG="$GITHUB_WORKSPACE/.demo/runtime/part06/data/events.jsonl" \
+                KNOWLEDGE_QUIET=1 AUTO_OPEN_BROWSER=0 python app.py --no-browser
+          ) >.demo/logs/part06.log 2>&1 & PID6=$!
+
+          sleep 4
+          echo "=== PROCESS STATUS ==="
+          ps -p "$PID4" -o pid,stat,cmd || true
+          ps -p "$PID5" -o pid,stat,cmd || true
+          ps -p "$PID6" -o pid,stat,cmd || true
+          echo "=== HEALTH ==="
+          curl -v --max-time 3 http://127.0.0.1:8794/health || true
+          curl -v --max-time 3 http://127.0.0.1:8795/health || true
+          curl -v --max-time 3 http://127.0.0.1:8796/health || true
+          echo "=== PART04 LOG ==="; cat .demo/logs/part04.log || true
+          echo "=== PART05 LOG ==="; cat .demo/logs/part05.log || true
+          echo "=== PART06 LOG ==="; cat .demo/logs/part06.log || true
+          kill "$PID4" "$PID5" "$PID6" 2>/dev/null || true
