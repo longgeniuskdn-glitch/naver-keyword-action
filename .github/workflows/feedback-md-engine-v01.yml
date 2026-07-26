@@ -9,6 +9,10 @@ on:
       - ".github/workflows/feedback-md-engine-v01.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -35,9 +39,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Install build dependency
-        run: python -m pip install --disable-pip-version-check gdown
+      - name: Download previously verified launcher v0.2
+        uses: actions/download-artifact@v4
+        with:
+          name: 우리회사_AI운영실_런처_v0.2_Linux검증
+          path: .build/v02-base
+          repository: ${{ github.repository }}
+          run-id: 30183194673
+          github-token: ${{ github.token }}
       - name: Build PART 04-06 launcher v0.3
+        env:
+          V02_BUNDLE_DIR: ${{ github.workspace }}/.build/v02-base
         run: python tools/build_ai_launcher_v03.py
       - name: Verify built bundle imports and memory engine
         shell: bash
