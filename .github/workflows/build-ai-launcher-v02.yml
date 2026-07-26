@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   build-and-verify:
@@ -29,7 +30,31 @@ jobs:
         run: python -m pip install --disable-pip-version-check gdown
 
       - name: Download sources and build three-module launcher
-        run: python tools/build_ai_launcher_v02.py
+        id: build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          python tools/build_ai_launcher_v02.py 2>&1 | tee build.log
+
+      - name: Report build failure
+        if: steps.build.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          {
+            echo '### 통합 런처 v0.2 빌드 실패 기록'
+            echo
+            echo '```text'
+            tail -n 100 build.log
+            echo '```'
+          } > build_failure_comment.md
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" --body-file build_failure_comment.md
+          fi
+          cat build_failure_comment.md
+          exit 1
 
       - name: Test launcher core
         working-directory: ai_launcher_v02
