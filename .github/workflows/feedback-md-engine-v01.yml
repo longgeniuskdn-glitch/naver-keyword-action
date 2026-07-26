@@ -1,0 +1,82 @@
+name: Feedback MD Engine v0.1
+
+on:
+  pull_request:
+    paths:
+      - "common_feedback/**"
+      - "ai_launcher_v03/**"
+      - "tools/build_ai_launcher_v03.py"
+      - ".github/workflows/feedback-md-engine-v01.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile source
+        run: python -m compileall -q common_feedback ai_launcher_v03
+      - name: Test feedback engine
+        run: python -m unittest discover -s common_feedback -p "test_*.py" -v
+      - name: Test launcher API
+        run: python -m unittest discover -s ai_launcher_v03 -p "test_*.py" -v
+
+  build-integrated-zip:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install build dependency
+        run: python -m pip install --disable-pip-version-check gdown
+      - name: Build PART 04-06 launcher v0.3
+        run: python tools/build_ai_launcher_v03.py
+      - name: Verify built bundle imports and memory engine
+        shell: bash
+        run: |
+          cd "dist/우리회사_AI운영실_런처_v0.3_피드백_MD승인"
+          python launcher.py --list > /tmp/launcher-v03-list.json
+          python - <<'PY'
+          from pathlib import Path
+          from common_feedback import FeedbackEngine
+          engine = FeedbackEngine(Path('runtime') / 'ci-feedback.db', Path('memory-ci'))
+          one = engine.submit_feedback({
+              'module_id': 'part05-work-intake',
+              'item_ref': 'ci-1',
+              'original_text': '기타 문의',
+              'revised_text': '배송 문의',
+              'reason_code': 'routing',
+              'reason_detail': '배송이라는 단어가 있으면 배송 담당으로 분류한다',
+              'reviewer': 'CI',
+              'rule_key': 'shipping-routing',
+              'review_seconds': 1,
+          })
+          engine.submit_feedback({
+              'module_id': 'part05-work-intake',
+              'item_ref': 'ci-2',
+              'original_text': '기타 문의',
+              'revised_text': '배송 문의',
+              'reason_code': 'routing',
+              'reason_detail': '배송이라는 단어가 있으면 배송 담당으로 분류한다',
+              'reviewer': 'CI',
+              'rule_key': 'shipping-routing',
+              'review_seconds': 1,
+          })
+          approved = engine.approve_candidate(one['candidate']['id'], approved_by='CI')
+          assert approved['status'] == 'approved'
+          assert (Path('memory-ci') / 'modules' / 'part05-work-intake' / 'INTAKE_RULES.md').exists()
+          PY
+      - name: Upload integrated launcher
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-operations-launcher-v03-feedback-md-approved
+          path: "dist/우리회사_AI운영실_런처_v0.3_피드백_MD승인.zip"
+          if-no-files-found: error
