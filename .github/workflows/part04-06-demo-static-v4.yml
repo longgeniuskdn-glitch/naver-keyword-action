@@ -1,0 +1,184 @@
+name: PART 04-06 Actual UI Demo v4
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/part04-06-demo-static-v4.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  create-demo:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Download verified launcher v0.4
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-operations-launcher-v04-part05-direct-learning
+          path: .demo/bundle
+          repository: ${{ github.repository }}
+          run-id: 30200476544
+          github-token: ${{ github.token }}
+
+      - name: Install capture tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-cjk
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null
+          npx playwright install --with-deps chromium
+
+      - name: Capture actual program screens and build videos
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p demo-output .demo/runtime .demo/logs
+          P4_APP="$(find .demo/bundle -path '*/modules/part04/app.py' -print -quit)"
+          P5_APP="$(find .demo/bundle -path '*/modules/part05/app.py' -print -quit)"
+          P6_APP="$(find .demo/bundle -path '*/modules/part06/app.py' -print -quit)"
+          test -n "$P4_APP" && test -n "$P5_APP" && test -n "$P6_APP"
+
+          (
+            cd "$(dirname "$P4_APP")"
+            env AI_DIAGNOSIS_DATA="$GITHUB_WORKSPACE/.demo/runtime/part04/data" \
+                AI_DIAGNOSIS_OUTPUT="$GITHUB_WORKSPACE/.demo/runtime/part04/output" \
+                AI_DIAGNOSIS_BACKUP="$GITHUB_WORKSPACE/.demo/runtime/part04/backups" \
+                AUTO_OPEN_BROWSER=0 python app.py --no-browser
+          ) >"$GITHUB_WORKSPACE/.demo/logs/part04.log" 2>&1 &
+          PID4=$!
+
+          (
+            cd "$(dirname "$P5_APP")"
+            env INTAKE_DATA_DIR="$GITHUB_WORKSPACE/.demo/runtime/part05/data" \
+                INTAKE_BACKUP_DIR="$GITHUB_WORKSPACE/.demo/runtime/part05/backups" \
+                INTAKE_DB="$GITHUB_WORKSPACE/.demo/runtime/part05/data/intake.db" \
+                AI_FEEDBACK_DB="$GITHUB_WORKSPACE/.demo/runtime/shared/feedback.db" \
+                AI_MEMORY_ROOT="$GITHUB_WORKSPACE/.demo/runtime/shared/memory" \
+                INTAKE_QUIET=1 AUTO_OPEN_BROWSER=0 python app.py --no-browser
+          ) >"$GITHUB_WORKSPACE/.demo/logs/part05.log" 2>&1 &
+          PID5=$!
+
+          (
+            cd "$(dirname "$P6_APP")"
+            env KNOWLEDGE_DATA_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/data" \
+                KNOWLEDGE_SOURCE_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/knowledge" \
+                KNOWLEDGE_OUTPUT_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/output" \
+                KNOWLEDGE_BACKUP_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/backups" \
+                KNOWLEDGE_DB="$GITHUB_WORKSPACE/.demo/runtime/part06/data/knowledge.db" \
+                AI_COMPANY_EVENT_LOG="$GITHUB_WORKSPACE/.demo/runtime/part06/data/events.jsonl" \
+                KNOWLEDGE_QUIET=1 AUTO_OPEN_BROWSER=0 python app.py --no-browser
+          ) >"$GITHUB_WORKSPACE/.demo/logs/part06.log" 2>&1 &
+          PID6=$!
+
+          cleanup(){ kill "$PID4" "$PID5" "$PID6" 2>/dev/null || true; }
+          trap cleanup EXIT
+
+          for url in http://127.0.0.1:8794/health http://127.0.0.1:8795/health http://127.0.0.1:8796/health; do
+            ready=0
+            for attempt in $(seq 1 60); do
+              if curl -fsS "$url" >/dev/null; then ready=1; break; fi
+              sleep 0.4
+            done
+            if [ "$ready" != 1 ]; then
+              echo "Server failed: $url"
+              cat .demo/logs/*.log || true
+              exit 1
+            fi
+          done
+
+          curl -fsSL http://127.0.0.1:8794/demo >/dev/null
+          curl -fsSL http://127.0.0.1:8795/demo >/dev/null
+          curl -fsSL http://127.0.0.1:8796/demo >/dev/null
+
+          cat > .demo/capture-v4.js <<'JS'
+          const { chromium } = require('playwright');
+          const path = require('path');
+          const fs = require('fs');
+          const out = path.resolve('demo-output');
+          fs.mkdirSync(out, { recursive: true });
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: 'ko-KR' });
+            const page = await context.newPage();
+            const shots = [
+              ['http://127.0.0.1:8794', 'PART04_01_자동화진단결과.png'],
+              ['http://127.0.0.1:8795', 'PART05_01_업무분류대기열.png'],
+              ['http://127.0.0.1:8795/correct/1', 'PART05_02_분류수정_AI교육.png'],
+              ['http://127.0.0.1:8796', 'PART06_01_회사자료목록.png'],
+              ['http://127.0.0.1:8796/?q=' + encodeURIComponent('환불 7일'), 'PART06_02_환불근거검색.png'],
+            ];
+            for (const [url, name] of shots) {
+              await page.goto(url, { waitUntil: 'networkidle' });
+              await page.waitForTimeout(900);
+              await page.screenshot({ path: path.join(out, name), fullPage: true });
+            }
+            await browser.close();
+          })().catch((error) => { console.error(error); process.exit(1); });
+          JS
+          node .demo/capture-v4.js
+
+          single_video() {
+            local image="$1" output="$2" duration="$3"
+            ffmpeg -hide_banner -loglevel error -y -loop 1 -t "$duration" -i "$image" \
+              -vf "scale=1440:-2:force_original_aspect_ratio=decrease,pad=1440:1000:(ow-iw)/2:(oh-ih)/2:color=white,fps=30,format=yuv420p" \
+              -c:v libx264 -preset veryfast -crf 23 -movflags +faststart "$output"
+          }
+
+          single_video demo-output/PART04_01_자동화진단결과.png demo-output/PART04_자동화진단실_실제화면.mp4 7
+
+          ffmpeg -hide_banner -loglevel error -y \
+            -loop 1 -t 6 -i demo-output/PART05_01_업무분류대기열.png \
+            -loop 1 -t 6 -i demo-output/PART05_02_분류수정_AI교육.png \
+            -filter_complex "[0:v]scale=1440:-2:force_original_aspect_ratio=decrease,pad=1440:1000:(ow-iw)/2:(oh-ih)/2:color=white,fps=30,format=yuv420p,setpts=PTS-STARTPTS[v0];[1:v]scale=1440:-2:force_original_aspect_ratio=decrease,pad=1440:1000:(ow-iw)/2:(oh-ih)/2:color=white,fps=30,format=yuv420p,setpts=PTS-STARTPTS[v1];[v0][v1]concat=n=2:v=1:a=0[v]" \
+            -map '[v]' -c:v libx264 -preset veryfast -crf 23 -movflags +faststart demo-output/PART05_업무분류_AI교육_실제화면.mp4
+
+          ffmpeg -hide_banner -loglevel error -y \
+            -loop 1 -t 6 -i demo-output/PART06_01_회사자료목록.png \
+            -loop 1 -t 6 -i demo-output/PART06_02_환불근거검색.png \
+            -filter_complex "[0:v]scale=1440:-2:force_original_aspect_ratio=decrease,pad=1440:1000:(ow-iw)/2:(oh-ih)/2:color=white,fps=30,format=yuv420p,setpts=PTS-STARTPTS[v0];[1:v]scale=1440:-2:force_original_aspect_ratio=decrease,pad=1440:1000:(ow-iw)/2:(oh-ih)/2:color=white,fps=30,format=yuv420p,setpts=PTS-STARTPTS[v1];[v0][v1]concat=n=2:v=1:a=0[v]" \
+            -map '[v]' -c:v libx264 -preset veryfast -crf 23 -movflags +faststart demo-output/PART06_AI지식창고_실제화면.mp4
+
+          ffmpeg -hide_banner -loglevel error -y \
+            -i demo-output/PART04_자동화진단실_실제화면.mp4 \
+            -i demo-output/PART05_업무분류_AI교육_실제화면.mp4 \
+            -i demo-output/PART06_AI지식창고_실제화면.mp4 \
+            -filter_complex "[0:v]setpts=PTS-STARTPTS[v0];[1:v]setpts=PTS-STARTPTS[v1];[2:v]setpts=PTS-STARTPTS[v2];[v0][v1][v2]concat=n=3:v=1:a=0[v]" \
+            -map '[v]' -c:v libx264 -preset veryfast -crf 23 -movflags +faststart demo-output/PART04-06_통합_실제화면.mp4
+
+          cat > demo-output/체험_안내.md <<'MD'
+          # PART 04~06 실제 화면 체험 자료
+
+          검증된 통합 런처 v0.4를 Ubuntu 24.04에서 실제 실행해 프로그램 화면을 캡처했습니다.
+
+          - PART 04: 반복 업무의 우선순위, 월간 가치, 운영 모드
+          - PART 05: 업무 분류 대기열과 분류 수정·AI 교육 화면
+          - PART 06: 회사 자료 목록과 `환불 7일` 근거 검색
+
+          Linux는 제작 검증 환경입니다. Mac 사용자는 통합 런처 ZIP을 압축 해제하고 `START_MAC.command`를 실행합니다.
+          이메일 자동 수신과 실제 답변 발송처럼 아직 연결되지 않은 기능은 포함하지 않았습니다.
+          MD
+          cp .demo/logs/*.log demo-output/ || true
+          ls -lah demo-output
+
+      - name: Upload actual UI videos and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: part04-06-actual-ui-demo-v4
+          path: |
+            demo-output
+            .demo/logs
+          if-no-files-found: warn
+          retention-days: 90
