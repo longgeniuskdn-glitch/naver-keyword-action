@@ -4,6 +4,7 @@ import json
 import tempfile
 import threading
 import unittest
+import urllib.parse
 import urllib.request
 from datetime import date, timedelta
 from pathlib import Path
