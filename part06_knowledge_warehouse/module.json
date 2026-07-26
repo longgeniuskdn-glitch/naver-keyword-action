@@ -1,0 +1,24 @@
+{
+  "module_id": "part06_knowledge",
+  "name": "회사 자료를 기억하는 AI 지식 창고",
+  "version": "1.0.0",
+  "category": "knowledge",
+  "standalone": true,
+  "start_command": ["python3", "app.py", "--no-browser"],
+  "windows_start_command": ["python", "app.py", "--no-browser"],
+  "health_url": "http://127.0.0.1:8796/health",
+  "home_url": "http://127.0.0.1:8796/",
+  "default_port": 8796,
+  "capabilities": [
+    "knowledge.index",
+    "knowledge.search",
+    "knowledge.export",
+    "backup.create",
+    "backup.restore"
+  ],
+  "data_policy": {
+    "local_only": true,
+    "source_read_only": true,
+    "external_publish": false
+  }
+}
