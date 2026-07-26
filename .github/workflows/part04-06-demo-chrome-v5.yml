@@ -1,0 +1,161 @@
+name: PART 04-06 Chrome UI Demo v5
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/part04-06-demo-chrome-v5.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  create-demo:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Download verified launcher v0.4
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-operations-launcher-v04-part05-direct-learning
+          path: .demo/bundle
+          repository: ${{ github.repository }}
+          run-id: 30200476544
+          github-token: ${{ github.token }}
+
+      - name: Install fonts and video encoder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-cjk
+          command -v google-chrome || command -v chromium || command -v chromium-browser
+
+      - name: Run programs, capture Chrome screenshots, and build MP4 files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p demo-output .demo/runtime .demo/logs
+          P4_APP="$(find .demo/bundle -path '*/modules/part04/app.py' -print -quit)"
+          P5_APP="$(find .demo/bundle -path '*/modules/part05/app.py' -print -quit)"
+          P6_APP="$(find .demo/bundle -path '*/modules/part06/app.py' -print -quit)"
+          test -n "$P4_APP" && test -n "$P5_APP" && test -n "$P6_APP"
+
+          (
+            cd "$(dirname "$P4_APP")"
+            env AI_DIAGNOSIS_DATA="$GITHUB_WORKSPACE/.demo/runtime/part04/data" \
+                AI_DIAGNOSIS_OUTPUT="$GITHUB_WORKSPACE/.demo/runtime/part04/output" \
+                AI_DIAGNOSIS_BACKUP="$GITHUB_WORKSPACE/.demo/runtime/part04/backups" \
+                AUTO_OPEN_BROWSER=0 python app.py --no-browser
+          ) >"$GITHUB_WORKSPACE/.demo/logs/part04.log" 2>&1 &
+          PID4=$!
+
+          (
+            cd "$(dirname "$P5_APP")"
+            env INTAKE_DATA_DIR="$GITHUB_WORKSPACE/.demo/runtime/part05/data" \
+                INTAKE_BACKUP_DIR="$GITHUB_WORKSPACE/.demo/runtime/part05/backups" \
+                INTAKE_DB="$GITHUB_WORKSPACE/.demo/runtime/part05/data/intake.db" \
+                AI_FEEDBACK_DB="$GITHUB_WORKSPACE/.demo/runtime/shared/feedback.db" \
+                AI_MEMORY_ROOT="$GITHUB_WORKSPACE/.demo/runtime/shared/memory" \
+                INTAKE_QUIET=1 AUTO_OPEN_BROWSER=0 python app.py --no-browser
+          ) >"$GITHUB_WORKSPACE/.demo/logs/part05.log" 2>&1 &
+          PID5=$!
+
+          (
+            cd "$(dirname "$P6_APP")"
+            env KNOWLEDGE_DATA_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/data" \
+                KNOWLEDGE_SOURCE_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/knowledge" \
+                KNOWLEDGE_OUTPUT_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/output" \
+                KNOWLEDGE_BACKUP_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/backups" \
+                KNOWLEDGE_DB="$GITHUB_WORKSPACE/.demo/runtime/part06/data/knowledge.db" \
+                AI_COMPANY_EVENT_LOG="$GITHUB_WORKSPACE/.demo/runtime/part06/data/events.jsonl" \
+                KNOWLEDGE_QUIET=1 AUTO_OPEN_BROWSER=0 python app.py --no-browser
+          ) >"$GITHUB_WORKSPACE/.demo/logs/part06.log" 2>&1 &
+          PID6=$!
+
+          cleanup(){ kill "$PID4" "$PID5" "$PID6" 2>/dev/null || true; }
+          trap cleanup EXIT
+
+          for url in http://127.0.0.1:8794/health http://127.0.0.1:8795/health http://127.0.0.1:8796/health; do
+            ready=0
+            for attempt in $(seq 1 60); do
+              if curl -fsS "$url" >/dev/null; then ready=1; break; fi
+              sleep 0.4
+            done
+            if [ "$ready" != 1 ]; then
+              cat .demo/logs/*.log || true
+              exit 1
+            fi
+          done
+
+          curl -fsSL http://127.0.0.1:8794/demo >/dev/null
+          curl -fsSL http://127.0.0.1:8795/demo >/dev/null
+          curl -fsSL http://127.0.0.1:8796/demo >/dev/null
+
+          CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          chrome_shot() {
+            local url="$1" output="$2"
+            "$CHROME" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
+              --hide-scrollbars --window-size=1440,1200 --virtual-time-budget=2000 \
+              --screenshot="$output" "$url" >/dev/null 2>&1
+            test -s "$output"
+          }
+
+          chrome_shot http://127.0.0.1:8794 demo-output/PART04_01_자동화진단결과.png
+          chrome_shot http://127.0.0.1:8795 demo-output/PART05_01_업무분류대기열.png
+          chrome_shot http://127.0.0.1:8795/correct/1 demo-output/PART05_02_분류수정_AI교육.png
+          chrome_shot http://127.0.0.1:8796 demo-output/PART06_01_회사자료목록.png
+          chrome_shot 'http://127.0.0.1:8796/?q=%ED%99%98%EB%B6%88%207%EC%9D%BC' demo-output/PART06_02_환불근거검색.png
+
+          make_still_video() {
+            local image="$1" output="$2" seconds="$3"
+            ffmpeg -hide_banner -loglevel error -y -loop 1 -t "$seconds" -i "$image" \
+              -vf "scale=1440:1000:force_original_aspect_ratio=decrease,pad=1440:1000:(ow-iw)/2:(oh-ih)/2:color=white,fps=30,format=yuv420p" \
+              -c:v libx264 -preset veryfast -crf 23 -movflags +faststart "$output"
+          }
+
+          make_still_video demo-output/PART04_01_자동화진단결과.png demo-output/PART04_자동화진단실_실제화면.mp4 7
+          make_still_video demo-output/PART05_01_업무분류대기열.png .demo/part05-a.mp4 6
+          make_still_video demo-output/PART05_02_분류수정_AI교육.png .demo/part05-b.mp4 6
+          make_still_video demo-output/PART06_01_회사자료목록.png .demo/part06-a.mp4 6
+          make_still_video demo-output/PART06_02_환불근거검색.png .demo/part06-b.mp4 6
+
+          printf "file '%s'\nfile '%s'\n" "$PWD/.demo/part05-a.mp4" "$PWD/.demo/part05-b.mp4" > .demo/part05.txt
+          ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i .demo/part05.txt -c copy demo-output/PART05_업무분류_AI교육_실제화면.mp4
+          printf "file '%s'\nfile '%s'\n" "$PWD/.demo/part06-a.mp4" "$PWD/.demo/part06-b.mp4" > .demo/part06.txt
+          ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i .demo/part06.txt -c copy demo-output/PART06_AI지식창고_실제화면.mp4
+
+          printf "file '%s'\nfile '%s'\nfile '%s'\n" \
+            "$PWD/demo-output/PART04_자동화진단실_실제화면.mp4" \
+            "$PWD/demo-output/PART05_업무분류_AI교육_실제화면.mp4" \
+            "$PWD/demo-output/PART06_AI지식창고_실제화면.mp4" > .demo/all.txt
+          ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i .demo/all.txt -c copy demo-output/PART04-06_통합_실제화면.mp4
+
+          cat > demo-output/체험_안내.md <<'MD'
+          # PART 04~06 실제 화면 체험 자료
+
+          검증된 통합 런처 v0.4를 Ubuntu 24.04에서 실제 실행하고 Chrome으로 프로그램 화면을 캡처했습니다.
+
+          - PART 04: 자동화 우선순위·월간 가치·운영 모드
+          - PART 05: 업무 분류 대기열과 분류 수정·AI 교육 화면
+          - PART 06: 회사 자료 목록과 `환불 7일` 근거 검색
+
+          Linux는 제작 검증 환경입니다. Mac에서는 통합 런처 ZIP을 압축 해제한 뒤 `START_MAC.command`를 실행합니다.
+          이메일 자동 수신·실제 답변 발송처럼 아직 구현되지 않은 기능은 이 자료에도 포함하지 않았습니다.
+          MD
+          cp .demo/logs/*.log demo-output/ || true
+          ls -lah demo-output
+
+      - name: Upload videos and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: part04-06-chrome-ui-demo-v5
+          path: |
+            demo-output
+            .demo/logs
+          if-no-files-found: warn
+          retention-days: 90
