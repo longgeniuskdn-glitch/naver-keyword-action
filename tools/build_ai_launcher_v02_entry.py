@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
 
 import build_ai_launcher_v02 as build_module
@@ -10,6 +11,52 @@ EXCLUDED_DIRS = {
     ".git", ".venv", "venv", "__pycache__", ".pytest_cache",
     "tests", "test", "scripts", "docs", "backups", "output",
 }
+
+ORIGINAL_EXTRACT_SOURCES = build_module.extract_sources
+
+
+def safe_extract_zip(archive: Path, destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    base = destination.resolve()
+    with zipfile.ZipFile(archive) as zf:
+        for item in zf.infolist():
+            target = (destination / item.filename).resolve()
+            if target != base and base not in target.parents:
+                raise RuntimeError(f"위험한 내부 ZIP 경로: {item.filename}")
+        zf.extractall(destination)
+
+
+def expand_nested_archives(root: Path, max_depth: int = 3) -> Path:
+    processed: set[Path] = set()
+    for depth in range(1, max_depth + 1):
+        nested = [
+            path for path in sorted(root.rglob("*.zip"))
+            if path.is_file() and path.resolve() not in processed
+        ]
+        if not nested:
+            break
+        for archive in nested:
+            processed.add(archive.resolve())
+            destination = archive.with_suffix("")
+            if destination.exists():
+                destination = archive.parent / f"{archive.stem}_extracted"
+            safe_extract_zip(archive, destination)
+            print(
+                f"[nested zip depth={depth}] "
+                f"{archive.relative_to(root)} -> {destination.relative_to(root)}"
+            )
+    return root
+
+
+def extract_sources(paths: dict[str, Path]) -> dict[str, Path]:
+    roots = ORIGINAL_EXTRACT_SOURCES(paths)
+    for key, root in roots.items():
+        expand_nested_archives(root)
+        files = [str(path.relative_to(root)) for path in sorted(root.rglob("*")) if path.is_file()]
+        print(f"[extracted files] {key}: {len(files)}")
+        for name in files[:80]:
+            print(f"  - {name}")
+    return roots
 
 
 def score_python_file(path: Path) -> int:
@@ -55,8 +102,8 @@ def score_python_file(path: Path) -> int:
 
 
 def python_candidates(root: Path) -> list[Path]:
-    candidates = [p for p in root.rglob("*.py") if p.is_file()]
-    candidates.sort(key=lambda p: (score_python_file(p), -len(p.parts)), reverse=True)
+    candidates = [path for path in root.rglob("*.py") if path.is_file()]
+    candidates.sort(key=lambda path: (score_python_file(path), -len(path.parts)), reverse=True)
     return candidates
 
 
@@ -86,19 +133,16 @@ def project_root_for(entrypoint: Path, extraction_root: Path) -> Path:
             score += 5
         if (folder / "backups").exists():
             score += 5
-        # 프로젝트 표지가 없으면 실행 파일과 가까운 폴더를 우선한다.
         distance = len(entrypoint.parent.relative_to(folder).parts) if folder != entrypoint.parent else 0
         return score, -distance
 
-    best = max(candidates, key=root_score)
-    # ZIP이 단일 최상위 폴더로 감싸져 있고 그 폴더가 프로젝트 표지를 가진 경우 보존한다.
-    return best
+    return max(candidates, key=root_score)
 
 
 def find_app_root(root: Path) -> Path:
     candidates = python_candidates(root)
     if not candidates or score_python_file(candidates[0]) <= 0:
-        names = [str(p.relative_to(root)) for p in sorted(root.rglob("*")) if p.is_file()]
+        names = [str(path.relative_to(root)) for path in sorted(root.rglob("*")) if path.is_file()]
         raise FileNotFoundError(
             "실행 가능한 Python 서버 파일을 찾지 못했습니다.\n" + "\n".join(names[:200])
         )
@@ -124,6 +168,7 @@ def existing_entrypoint(module_root: Path, fallback: str) -> str:
     return str(candidates[0].relative_to(module_root))
 
 
+build_module.extract_sources = extract_sources
 build_module.find_app_root = find_app_root
 build_module.existing_entrypoint = existing_entrypoint
 
