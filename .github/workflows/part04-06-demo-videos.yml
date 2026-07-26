@@ -1,0 +1,282 @@
+name: PART 04-06 Visual Demo Videos
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/part04-06-demo-videos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  record:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Download verified integrated launcher v0.4
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-operations-launcher-v04-part05-direct-learning
+          path: .demo/bundle
+          repository: ${{ github.repository }}
+          run-id: 30200476544
+          github-token: ${{ github.token }}
+
+      - name: Install browser, Korean fonts, and video tools
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-cjk
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null
+          npx playwright install --with-deps chromium
+
+      - name: Record real PART 04-06 browser demonstrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p demo-output .demo/runtime
+
+          P4_APP="$(find .demo/bundle -path '*/modules/part04/app.py' -print -quit)"
+          P5_APP="$(find .demo/bundle -path '*/modules/part05/app.py' -print -quit)"
+          P6_APP="$(find .demo/bundle -path '*/modules/part06/app.py' -print -quit)"
+          test -n "$P4_APP" && test -n "$P5_APP" && test -n "$P6_APP"
+
+          P4_DIR="$(dirname "$P4_APP")"
+          P5_DIR="$(dirname "$P5_APP")"
+          P6_DIR="$(dirname "$P6_APP")"
+
+          (
+            cd "$P4_DIR"
+            env \
+              AI_DIAGNOSIS_DATA="$GITHUB_WORKSPACE/.demo/runtime/part04/data" \
+              AI_DIAGNOSIS_OUTPUT="$GITHUB_WORKSPACE/.demo/runtime/part04/output" \
+              AI_DIAGNOSIS_BACKUP="$GITHUB_WORKSPACE/.demo/runtime/part04/backups" \
+              AUTO_OPEN_BROWSER=0 \
+              python app.py --no-browser
+          ) >.demo/part04.log 2>&1 &
+          PID4=$!
+
+          (
+            cd "$P5_DIR"
+            env \
+              INTAKE_DATA_DIR="$GITHUB_WORKSPACE/.demo/runtime/part05/data" \
+              INTAKE_BACKUP_DIR="$GITHUB_WORKSPACE/.demo/runtime/part05/backups" \
+              INTAKE_DB="$GITHUB_WORKSPACE/.demo/runtime/part05/data/intake.db" \
+              AI_FEEDBACK_DB="$GITHUB_WORKSPACE/.demo/runtime/shared/feedback.db" \
+              AI_MEMORY_ROOT="$GITHUB_WORKSPACE/.demo/runtime/shared/memory" \
+              INTAKE_QUIET=1 \
+              AUTO_OPEN_BROWSER=0 \
+              python app.py --no-browser
+          ) >.demo/part05.log 2>&1 &
+          PID5=$!
+
+          (
+            cd "$P6_DIR"
+            env \
+              KNOWLEDGE_DATA_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/data" \
+              KNOWLEDGE_SOURCE_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/knowledge" \
+              KNOWLEDGE_OUTPUT_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/output" \
+              KNOWLEDGE_BACKUP_DIR="$GITHUB_WORKSPACE/.demo/runtime/part06/backups" \
+              KNOWLEDGE_DB="$GITHUB_WORKSPACE/.demo/runtime/part06/data/knowledge.db" \
+              AI_COMPANY_EVENT_LOG="$GITHUB_WORKSPACE/.demo/runtime/part06/data/events.jsonl" \
+              KNOWLEDGE_QUIET=1 \
+              AUTO_OPEN_BROWSER=0 \
+              python app.py --no-browser
+          ) >.demo/part06.log 2>&1 &
+          PID6=$!
+
+          cleanup() {
+            kill "$PID4" "$PID5" "$PID6" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for url in \
+            http://127.0.0.1:8794/health \
+            http://127.0.0.1:8795/health \
+            http://127.0.0.1:8796/health
+          do
+            for attempt in $(seq 1 40); do
+              if curl -fsS "$url" >/dev/null; then break; fi
+              sleep 0.5
+              if [ "$attempt" = 40 ]; then
+                echo "Server did not start: $url"
+                cat .demo/part04.log .demo/part05.log .demo/part06.log || true
+                exit 1
+              fi
+            done
+          done
+
+          cat > .demo/record.js <<'JS'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          const path = require('path');
+
+          const out = path.resolve('demo-output');
+          fs.mkdirSync(out, { recursive: true });
+
+          async function pause(page, ms = 1200) {
+            await page.waitForTimeout(ms);
+          }
+
+          async function saveVideo(page, context, browser, name) {
+            const video = page.video();
+            await context.close();
+            const recorded = await video.path();
+            fs.renameSync(recorded, path.join(out, `${name}.webm`));
+            await browser.close();
+          }
+
+          async function recordPart04() {
+            const browser = await chromium.launch({ headless: true });
+            const context = await browser.newContext({
+              viewport: { width: 1440, height: 1000 },
+              recordVideo: { dir: out, size: { width: 1440, height: 1000 } },
+              locale: 'ko-KR',
+            });
+            const page = await context.newPage();
+            await page.goto('http://127.0.0.1:8794', { waitUntil: 'networkidle' });
+            await pause(page, 1800);
+            await page.screenshot({ path: path.join(out, 'PART04_01_첫화면.png'), fullPage: true });
+            await page.getByText('샘플 업무', { exact: true }).click();
+            await page.waitForLoadState('networkidle');
+            await pause(page, 1800);
+            await page.screenshot({ path: path.join(out, 'PART04_02_진단결과.png'), fullPage: true });
+            const approve = page.getByRole('button', { name: '첫 프로젝트 승인' }).first();
+            if (await approve.count()) {
+              await approve.scrollIntoViewIfNeeded();
+              await pause(page, 900);
+              await approve.click();
+              await page.waitForLoadState('networkidle');
+              await pause(page, 1800);
+            }
+            await page.screenshot({ path: path.join(out, 'PART04_03_승인결과.png'), fullPage: true });
+            await saveVideo(page, context, browser, 'PART04_자동화진단실_시연');
+          }
+
+          async function recordPart05() {
+            const browser = await chromium.launch({ headless: true });
+            const context = await browser.newContext({
+              viewport: { width: 1440, height: 1000 },
+              recordVideo: { dir: out, size: { width: 1440, height: 1000 } },
+              locale: 'ko-KR',
+            });
+            const page = await context.newPage();
+            await page.goto('http://127.0.0.1:8795', { waitUntil: 'networkidle' });
+            await pause(page, 1400);
+            const demoLink = page.getByText('샘플 넣기', { exact: true });
+            if (await demoLink.count()) {
+              await demoLink.click();
+              await page.waitForLoadState('networkidle');
+            }
+            await pause(page, 1800);
+            await page.screenshot({ path: path.join(out, 'PART05_01_업무대기열.png'), fullPage: true });
+            const correctionLink = page.getByText('분류 수정', { exact: true }).first();
+            await correctionLink.scrollIntoViewIfNeeded();
+            await pause(page, 900);
+            await correctionLink.click();
+            await page.waitForLoadState('networkidle');
+            await pause(page, 1600);
+            await page.selectOption('select[name="category"]', { label: '배송' });
+            await page.selectOption('select[name="assigned_team"]', { label: '물류' });
+            await page.selectOption('select[name="urgency"]', 'medium');
+            await page.selectOption('select[name="handling_mode"]', 'standard');
+            await page.fill('input[name="trigger_keyword"]', '운송장');
+            await page.fill('input[name="reviewer"]', 'Kris');
+            await page.fill('input[name="review_seconds"]', '45');
+            await page.fill('textarea[name="note"]', '운송장 관련 문의는 배송 담당으로 분류합니다.');
+            await pause(page, 1500);
+            await page.screenshot({ path: path.join(out, 'PART05_02_AI교육입력.png'), fullPage: true });
+            await page.getByRole('button', { name: '현재 업무 수정 + 피드백 저장' }).click();
+            await page.waitForLoadState('networkidle');
+            await pause(page, 1800);
+            await page.screenshot({ path: path.join(out, 'PART05_03_피드백저장.png'), fullPage: true });
+            await saveVideo(page, context, browser, 'PART05_업무분류_AI교육_시연');
+          }
+
+          async function recordPart06() {
+            const browser = await chromium.launch({ headless: true });
+            const context = await browser.newContext({
+              viewport: { width: 1440, height: 1000 },
+              recordVideo: { dir: out, size: { width: 1440, height: 1000 } },
+              locale: 'ko-KR',
+            });
+            const page = await context.newPage();
+            await page.goto('http://127.0.0.1:8796', { waitUntil: 'networkidle' });
+            await pause(page, 1400);
+            await page.getByText('샘플 자료 넣기', { exact: true }).click();
+            await page.waitForLoadState('networkidle');
+            await pause(page, 1600);
+            await page.screenshot({ path: path.join(out, 'PART06_01_자료색인.png'), fullPage: true });
+            await page.fill('input[name="q"]', '환불 7일');
+            await pause(page, 800);
+            await page.getByRole('button', { name: '근거 찾기' }).click();
+            await page.waitForLoadState('networkidle');
+            await pause(page, 2000);
+            await page.screenshot({ path: path.join(out, 'PART06_02_근거검색.png'), fullPage: true });
+            await saveVideo(page, context, browser, 'PART06_AI지식창고_시연');
+          }
+
+          (async () => {
+            await recordPart04();
+            await recordPart05();
+            await recordPart06();
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          JS
+
+          node .demo/record.js
+
+          for video in demo-output/*.webm; do
+            mp4="${video%.webm}.mp4"
+            ffmpeg -hide_banner -loglevel error -y -i "$video" \
+              -vf "fps=30,format=yuv420p" -c:v libx264 -preset veryfast -crf 23 \
+              -movflags +faststart "$mp4"
+          done
+
+          printf "file '%s'\n" \
+            "$PWD/demo-output/PART04_자동화진단실_시연.mp4" \
+            "$PWD/demo-output/PART05_업무분류_AI교육_시연.mp4" \
+            "$PWD/demo-output/PART06_AI지식창고_시연.mp4" \
+            > .demo/concat.txt
+          ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i .demo/concat.txt \
+            -c copy "demo-output/PART04-06_통합_실제화면_시연.mp4"
+
+          cat > demo-output/체험_안내.md <<'MD'
+          # PART 04~06 실제 화면 체험 자료
+
+          이 자료는 Ubuntu 24.04의 실제 프로그램을 Chromium 브라우저에서 조작하며 녹화했습니다.
+          사용자가 Linux를 설치해야 한다는 뜻은 아닙니다. Mac에서는 통합 런처 ZIP을 한 번 압축 해제하고 `START_MAC.command`를 실행합니다.
+
+          ## 영상
+          - `PART04-06_통합_실제화면_시연.mp4`: 세 프로그램을 이어서 보는 영상
+          - `PART04_자동화진단실_시연.mp4`: 샘플 업무 등록, 우선순위 결과, 첫 프로젝트 승인
+          - `PART05_업무분류_AI교육_시연.mp4`: 샘플 업무, 분류 수정, 수정 이유와 키워드 저장
+          - `PART06_AI지식창고_시연.mp4`: 샘플 자료 색인, `환불 7일` 근거 검색
+
+          ## 현재 범위
+          PART 04~06의 실제 로컬 화면과 현재 구현된 기능을 그대로 보여줍니다. 이메일 자동 수신·답변 자동 발송 등 아직 연결하지 않은 기능은 영상에 포함하지 않았습니다.
+          MD
+
+          ls -lah demo-output
+
+      - name: Upload videos and screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: part04-06-real-ui-demo-videos
+          path: demo-output
+          if-no-files-found: error
+          retention-days: 90
