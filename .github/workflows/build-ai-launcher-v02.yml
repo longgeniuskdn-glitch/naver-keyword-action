@@ -6,6 +6,7 @@ on:
     paths:
       - 'ai_launcher_v02/**'
       - 'tools/build_ai_launcher_v02.py'
+      - 'tools/build_ai_launcher_v02_entry.py'
       - '.github/workflows/build-ai-launcher-v02.yml'
   workflow_dispatch:
 
@@ -35,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python tools/build_ai_launcher_v02.py 2>&1 | tee build.log
+          python tools/build_ai_launcher_v02_entry.py 2>&1 | tee build.log
 
       - name: Report build failure
         if: steps.build.outcome == 'failure'
@@ -75,8 +76,14 @@ jobs:
             else
               echo "No unittest file found; continuing to preflight and smoke test."
             fi
-            if python app.py --help 2>&1 | grep -q -- '--preflight'; then
-              python app.py --preflight
+            ENTRY=$(python - <<'PY'
+import json
+from pathlib import Path
+print(json.loads(Path('module.json').read_text(encoding='utf-8'))['entrypoint'])
+PY
+)
+            if python "$ENTRY" --help 2>&1 | grep -q -- '--preflight'; then
+              python "$ENTRY" --preflight
             fi
           done
 
