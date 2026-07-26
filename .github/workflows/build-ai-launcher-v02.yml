@@ -76,12 +76,7 @@ jobs:
             else
               echo "No unittest file found; continuing to preflight and smoke test."
             fi
-            ENTRY=$(python - <<'PY'
-import json
-from pathlib import Path
-print(json.loads(Path('module.json').read_text(encoding='utf-8'))['entrypoint'])
-PY
-)
+            ENTRY=$(python -c "import json,pathlib; print(json.loads(pathlib.Path('module.json').read_text(encoding='utf-8'))['entrypoint'])")
             if python "$ENTRY" --help 2>&1 | grep -q -- '--preflight'; then
               python "$ENTRY" --preflight
             fi
