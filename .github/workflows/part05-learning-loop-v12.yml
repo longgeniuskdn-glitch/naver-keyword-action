@@ -1,0 +1,175 @@
+name: PART 05 Direct Learning Loop v1.2
+
+on:
+  pull_request:
+    paths:
+      - "part05_learning/**"
+      - "tools/build_part05_learning_v12.py"
+      - ".github/workflows/part05-learning-loop-v12.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile source
+        run: python -m compileall -q common_feedback part05_learning tools/build_part05_learning_v12.py
+      - name: Test common feedback engine
+        run: python -m unittest discover -s common_feedback -p "test_*.py" -v
+      - name: Test PART 05 learning rules
+        run: python -m unittest discover -s part05_learning -p "test_*.py" -v
+
+  build-and-smoke:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Download verified launcher v0.3
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-operations-launcher-v03-feedback-md-approved-single-extraction
+          path: .build/v03-base
+          repository: ${{ github.repository }}
+          run-id: 30196009245
+          github-token: ${{ github.token }}
+      - name: Build integrated and standalone packages
+        env:
+          V03_BUNDLE_DIR: ${{ github.workspace }}/.build/v03-base
+        run: python tools/build_part05_learning_v12.py
+      - name: Verify complete learning loop
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+          import importlib.util
+          import os
+          import sys
+          import tempfile
+          import threading
+          import urllib.request
+          from pathlib import Path
+
+          bundle = Path("dist/우리회사_AI운영실_런처_v0.4_PART05_직접학습").resolve()
+          module = bundle / "modules" / "part05"
+          with tempfile.TemporaryDirectory() as temp:
+              temp_root = Path(temp)
+              os.environ["INTAKE_DATA_DIR"] = str(temp_root / "intake-data")
+              os.environ["INTAKE_BACKUP_DIR"] = str(temp_root / "backups")
+              os.environ["INTAKE_DB"] = str(temp_root / "intake-data" / "intake.db")
+              os.environ["AI_FEEDBACK_DB"] = str(temp_root / "runtime" / "feedback.db")
+              os.environ["AI_MEMORY_ROOT"] = str(temp_root / "memory")
+              os.environ["INTAKE_QUIET"] = "1"
+              sys.path.insert(0, str(module))
+              sys.path.insert(0, str(bundle))
+              spec = importlib.util.spec_from_file_location("part05_learning_app", module / "app.py")
+              app = importlib.util.module_from_spec(spec)
+              assert spec and spec.loader
+              spec.loader.exec_module(app)
+
+              candidate_id = None
+              for index in range(2):
+                  intake_id = app.add_intake({
+                      "channel": "memo",
+                      "sender": f"partner-{index}",
+                      "subject": f"파트너 질문 {index}",
+                      "body": "관계와 담당 부서를 알려 주세요.",
+                  })
+                  result = app.correct_intake(intake_id, {
+                      "category": "제휴·콘텐츠",
+                      "assigned_team": "마케팅",
+                      "urgency": "medium",
+                      "handling_mode": "standard",
+                      "trigger_keyword": "파트너",
+                      "reviewer": "CI",
+                      "review_seconds": "2",
+                      "note": "반복 분류 수정",
+                  })
+                  candidate_id = result["candidate"]["id"]
+              candidate = app.feedback_engine().get_candidate(candidate_id)
+              assert candidate["status"] == "pending", candidate
+              app.feedback_engine().approve_candidate(candidate_id, approved_by="CI")
+              rules_md = temp_root / "memory" / "modules" / "part05-work-intake" / "INTAKE_RULES.md"
+              assert rules_md.exists()
+
+              third = app.add_intake({
+                  "channel": "memo",
+                  "sender": "partner-3",
+                  "subject": "새 파트너 질문",
+                  "body": "어느 부서가 담당하나요?",
+              })
+              learned = app.base.get_intake(third)
+              assert learned["category"] == "제휴·콘텐츠", dict(learned)
+              assert learned["assigned_team"] == "마케팅", dict(learned)
+              assert learned["urgency"] == "medium", dict(learned)
+
+              legal_id = app.add_intake({
+                  "channel": "email",
+                  "sender": "legal@example.com",
+                  "subject": "계약 검토",
+                  "body": "내용증명과 법률 판단이 필요합니다.",
+              })
+              try:
+                  app.correct_intake(legal_id, {
+                      "category": "기타",
+                      "assigned_team": "운영",
+                      "urgency": "low",
+                      "handling_mode": "standard",
+                      "trigger_keyword": "계약",
+                      "reviewer": "CI",
+                  })
+              except ValueError as exc:
+                  assert "안전" in str(exc)
+              else:
+                  raise AssertionError("보호 업무의 처리 모드 하향이 차단되지 않았습니다.")
+
+              page = app.render_correction_page(third)
+              assert "분류 수정과 AI 교육" in page
+              assert "현재 업무 수정 + 피드백 저장" in page
+
+              server = app.create_server("127.0.0.1", 0)
+              thread = threading.Thread(target=server.serve_forever, daemon=True)
+              thread.start()
+              try:
+                  port = server.server_address[1]
+                  health = urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5).read().decode("utf-8")
+                  correction = urllib.request.urlopen(f"http://127.0.0.1:{port}/correct/{third}", timeout=5).read().decode("utf-8")
+                  assert '"ok": true' in health.lower()
+                  assert "분류 수정과 AI 교육" in correction
+              finally:
+                  server.shutdown()
+                  server.server_close()
+                  thread.join(timeout=5)
+          PY
+      - name: Remove smoke-test runtime data
+        shell: bash
+        run: |
+          rm -rf "dist/우리회사_AI운영실_런처_v0.4_PART05_직접학습/runtime"/*
+          rm -rf "dist/우리회사_AI운영실_런처_v0.4_PART05_직접학습/memory"/*
+          rm -rf "dist/PART05_업무_접수_분류실_직접학습_v1.2/runtime"/*
+          rm -rf "dist/PART05_업무_접수_분류실_직접학습_v1.2/memory"/*
+      - name: Upload integrated launcher v0.4
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-operations-launcher-v04-part05-direct-learning
+          path: "dist/우리회사_AI운영실_런처_v0.4_PART05_직접학습"
+          if-no-files-found: error
+      - name: Upload standalone PART 05 v1.2
+        uses: actions/upload-artifact@v4
+        with:
+          name: part05-work-intake-direct-learning-v12
+          path: "dist/PART05_업무_접수_분류실_직접학습_v1.2"
+          if-no-files-found: error
