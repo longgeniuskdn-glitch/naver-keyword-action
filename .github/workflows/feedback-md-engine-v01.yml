@@ -86,9 +86,14 @@ jobs:
           assert approved['status'] == 'approved'
           assert (Path('memory-ci') / 'modules' / 'part05-work-intake' / 'INTAKE_RULES.md').exists()
           PY
-      - name: Upload integrated launcher
+      - name: Remove CI runtime data from delivery folder
+        shell: bash
+        run: |
+          rm -rf "dist/우리회사_AI운영실_런처_v0.3_피드백_MD승인/memory-ci"
+          rm -f "dist/우리회사_AI운영실_런처_v0.3_피드백_MD승인/runtime/ci-feedback.db"*
+      - name: Upload single-extraction integrated launcher
         uses: actions/upload-artifact@v4
         with:
-          name: ai-operations-launcher-v03-feedback-md-approved
-          path: "dist/우리회사_AI운영실_런처_v0.3_피드백_MD승인.zip"
+          name: ai-operations-launcher-v03-feedback-md-approved-single-extraction
+          path: "dist/우리회사_AI운영실_런처_v0.3_피드백_MD승인"
           if-no-files-found: error
