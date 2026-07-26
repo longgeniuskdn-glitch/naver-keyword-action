@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from common_feedback.engine import FeedbackEngine, FeedbackEngineError, RuleConflictError
+from common_feedback import FeedbackEngine, FeedbackEngineError, RuleConflictError
 
 
 class FeedbackEngineTests(unittest.TestCase):
