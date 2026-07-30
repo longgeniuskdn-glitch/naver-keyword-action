@@ -1,0 +1,155 @@
+name: Build AI Code Usage v0.4.0
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "ai-code-usage-v040.part*"
+      - ".github/workflows/build-ai-code-usage-v040.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ai-code-usage-v040.part* | base64 --decode > /tmp/source.zip
+          unzip -q /tmp/source.zip -d /tmp/source
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build Android APK
+        working-directory: /tmp/source/codex-claude-usage-suite-v0.4.0/android
+        run: gradle :app:assembleDebug --stacktrace
+      - name: Prepare Android artifact
+        run: cp /tmp/source/codex-claude-usage-suite-v0.4.0/android/app/build/outputs/apk/debug/app-debug.apk AI-Code-Usage-Android-v0.4.0.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Code-Usage-Android-v0.4.0
+          path: AI-Code-Usage-Android-v0.4.0.apk
+          if-no-files-found: error
+
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ai-code-usage-v040.part* | base64 --decode > /tmp/source.zip
+          unzip -q /tmp/source.zip -d /tmp/source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Bundle official Codex for Apple Silicon
+        working-directory: /tmp/source/codex-claude-usage-suite-v0.4.0/desktop
+        run: |
+          mkdir -p vendor/current /tmp/codex-mac
+          curl -L --fail --retry 3 https://github.com/openai/codex/releases/latest/download/codex-aarch64-apple-darwin.tar.gz -o /tmp/codex-mac.tar.gz
+          tar -xzf /tmp/codex-mac.tar.gz -C /tmp/codex-mac
+          CODEX_BIN=$(find /tmp/codex-mac -type f -name 'codex-aarch64-apple-darwin' | head -1)
+          test -n "$CODEX_BIN"
+          cp "$CODEX_BIN" vendor/current/codex
+          chmod 755 vendor/current/codex
+          node -e "const fs=require('fs');const p=require('./package.json');p.build.extraResources=[{from:'vendor/current/codex',to:'vendor/codex'}];fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+      - name: Install and test desktop app
+        working-directory: /tmp/source/codex-claude-usage-suite-v0.4.0/desktop
+        run: npm install && npm test
+      - name: Build Mac M4 packages
+        working-directory: /tmp/source/codex-claude-usage-suite-v0.4.0/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --mac dmg zip --arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Code-Usage-Mac-M4-v0.4.0
+          path: |
+            /tmp/source/codex-claude-usage-suite-v0.4.0/desktop/dist/*.dmg
+            /tmp/source/codex-claude-usage-suite-v0.4.0/desktop/dist/*.zip
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        shell: bash
+        run: |
+          cat ai-code-usage-v040.part* | base64 --decode > "$RUNNER_TEMP/source.zip"
+          unzip -q "$RUNNER_TEMP/source.zip" -d "$RUNNER_TEMP/source"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Bundle official Codex for Windows
+        shell: pwsh
+        working-directory: ${{ runner.temp }}\source\codex-claude-usage-suite-v0.4.0\desktop
+        run: |
+          New-Item -ItemType Directory -Force vendor\current | Out-Null
+          Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/openai/codex/releases/latest/download/codex-x86_64-pc-windows-msvc.zip" -OutFile "$env:RUNNER_TEMP\codex-win.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\codex-win.zip" -DestinationPath "$env:RUNNER_TEMP\codex-win" -Force
+          $codex = Get-ChildItem "$env:RUNNER_TEMP\codex-win" -Recurse -File -Filter "codex-x86_64-pc-windows-msvc.exe" | Select-Object -First 1
+          if (-not $codex) { throw "Official Codex Windows binary was not found in release archive." }
+          Copy-Item $codex.FullName vendor\current\codex.exe
+          node -e "const fs=require('fs');const p=require('./package.json');p.build.extraResources=[{from:'vendor/current/codex.exe',to:'vendor/codex.exe'}];fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+      - name: Install and test desktop app
+        shell: pwsh
+        working-directory: ${{ runner.temp }}\source\codex-claude-usage-suite-v0.4.0\desktop
+        run: npm install; npm test
+      - name: Build Windows installer
+        shell: pwsh
+        working-directory: ${{ runner.temp }}\source\codex-claude-usage-suite-v0.4.0\desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npx electron-builder --win nsis --x64
+          $setup = Get-ChildItem dist -File -Filter "*.exe" | Select-Object -First 1
+          if (-not $setup) { throw "Windows installer was not generated." }
+          Copy-Item $setup.FullName AI-Code-Usage-Windows-Setup-v0.4.0.exe
+          Remove-Item dist -Recurse -Force
+          npx electron-builder --win portable --x64
+          $portable = Get-ChildItem dist -File -Filter "*.exe" | Select-Object -First 1
+          if (-not $portable) { throw "Windows portable executable was not generated." }
+          Copy-Item $portable.FullName AI-Code-Usage-Windows-Portable-v0.4.0.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Code-Usage-Windows-v0.4.0
+          path: |
+            ${{ runner.temp }}\source\codex-claude-usage-suite-v0.4.0\desktop\AI-Code-Usage-Windows-Setup-v0.4.0.exe
+            ${{ runner.temp }}\source\codex-claude-usage-suite-v0.4.0\desktop\AI-Code-Usage-Windows-Portable-v0.4.0.exe
+          if-no-files-found: error
+
+  ios:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ai-code-usage-v040.part* | base64 --decode > /tmp/source.zip
+          unzip -q /tmp/source.zip -d /tmp/source
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate and compile iPhone app
+        working-directory: /tmp/source/codex-claude-usage-suite-v0.4.0/ios
+        run: |
+          xcodegen generate
+          xcodebuild -project AICodeUsage.xcodeproj -scheme AICodeUsage -sdk iphonesimulator -configuration Release -derivedDataPath /tmp/DerivedData CODE_SIGNING_ALLOWED=NO build
+      - name: Prepare iPhone Xcode project
+        working-directory: /tmp/source/codex-claude-usage-suite-v0.4.0
+        run: zip -qr /tmp/AI-Code-Usage-iPhone-Xcode-v0.4.0.zip ios
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Code-Usage-iPhone-Xcode-v0.4.0
+          path: /tmp/AI-Code-Usage-iPhone-Xcode-v0.4.0.zip
+          if-no-files-found: error
