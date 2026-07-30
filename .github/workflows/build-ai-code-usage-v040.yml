@@ -97,7 +97,7 @@ jobs:
         working-directory: ${{ runner.temp }}\source\codex-claude-usage-suite-v0.4.0\desktop
         run: |
           New-Item -ItemType Directory -Force vendor\current | Out-Null
-          Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/openai/codex/releases/latest/download/codex-x86_64-pc-windows-msvc.zip" -OutFile "$env:RUNNER_TEMP\codex-win.zip"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/openai/codex/releases/latest/download/codex-x86_64-pc-windows-msvc.exe.zip" -OutFile "$env:RUNNER_TEMP\codex-win.zip"
           Expand-Archive -Path "$env:RUNNER_TEMP\codex-win.zip" -DestinationPath "$env:RUNNER_TEMP\codex-win" -Force
           $codex = Get-ChildItem "$env:RUNNER_TEMP\codex-win" -Recurse -File -Filter "codex-x86_64-pc-windows-msvc.exe" | Select-Object -First 1
           if (-not $codex) { throw "Official Codex Windows binary was not found in release archive." }
@@ -144,6 +144,14 @@ jobs:
         working-directory: /tmp/source/codex-claude-usage-suite-v0.4.0/ios
         run: |
           xcodegen generate
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('AICodeUsage.xcodeproj/project.pbxproj')
+          s = p.read_text()
+          s = s.replace('objectVersion = 77;', 'objectVersion = 56;')
+          s = s.replace('preferredProjectObjectVersion = 77;', 'preferredProjectObjectVersion = 56;')
+          p.write_text(s)
+          PY
           xcodebuild -project AICodeUsage.xcodeproj -scheme AICodeUsage -sdk iphonesimulator -configuration Release -derivedDataPath /tmp/DerivedData CODE_SIGNING_ALLOWED=NO build
       - name: Prepare iPhone Xcode project
         working-directory: /tmp/source/codex-claude-usage-suite-v0.4.0
