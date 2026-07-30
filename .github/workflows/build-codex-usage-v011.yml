@@ -1,0 +1,75 @@
+name: Build Codex Usage Bar v0.1.1
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "build-inputs/codex-apk-v011.zip.b64"
+      - "build-inputs/codex-mac-v011.zip.b64"
+      - ".github/workflows/build-codex-usage-v011.yml"
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract Android source
+        run: base64 --decode build-inputs/codex-apk-v011.zip.b64 > /tmp/android.zip && unzip -q /tmp/android.zip
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build APK
+        working-directory: codex-apk-v011
+        run: gradle :app:assembleDebug --stacktrace
+      - name: Prepare APK
+        run: cp codex-apk-v011/app/build/outputs/apk/debug/app-debug.apk Codex-Usage-Bar-Galaxy-v0.1.1.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Codex-Usage-Bar-Galaxy-v0.1.1
+          path: Codex-Usage-Bar-Galaxy-v0.1.1.apk
+          if-no-files-found: error
+
+  mac:
+    runs-on: macos-14
+    permissions: { contents: read }
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract Mac source
+        run: base64 --decode build-inputs/codex-mac-v011.zip.b64 > /tmp/mac.zip && ditto -x -k /tmp/mac.zip .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: codex-mac-v011/package.json
+      - name: Install dependencies
+        working-directory: codex-mac-v011
+        run: npm install --no-audit --no-fund
+      - name: Test
+        working-directory: codex-mac-v011
+        run: npm test
+      - name: Build Apple Silicon app
+        working-directory: codex-mac-v011
+        run: npx electron-builder --mac dmg zip --arm64
+      - name: Prepare Mac files
+        run: |
+          mkdir -p mac-output
+          find codex-mac-v011/dist -maxdepth 1 -name '*.dmg' -exec cp '{}' 'mac-output/Codex-Usage-Bar-Mac-M4-v0.1.1.dmg' \;
+          find codex-mac-v011/dist -maxdepth 1 -name '*arm64*.zip' -exec cp '{}' 'mac-output/Codex-Usage-Bar-Mac-M4-v0.1.1.zip' \;
+          ls -lah mac-output
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Codex-Usage-Bar-Mac-M4-v0.1.1
+          path: mac-output/*
+          if-no-files-found: error
