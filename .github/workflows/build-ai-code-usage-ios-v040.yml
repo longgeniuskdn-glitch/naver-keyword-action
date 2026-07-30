@@ -1,0 +1,189 @@
+name: Build AI Code Usage iPhone v0.4.0
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "ai-code-usage-v040.part*"
+      - ".github/workflows/build-ai-code-usage-ios-v040.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ai-code-usage-v040.part* | base64 --decode > /tmp/source.zip
+          unzip -q /tmp/source.zip -d /tmp/source
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Repair iPhone sources
+        working-directory: /tmp/source/codex-claude-usage-suite-v0.4.0/ios
+        run: |
+          cat > Widget/UsageWidget.swift <<'SWIFT'
+          import WidgetKit
+          import SwiftUI
+          import ActivityKit
+          import Foundation
+
+          private func loadWidgetSnapshot() -> SharedSnapshot {
+              let defaults = UserDefaults(suiteName: "group.com.myvision.aicodeusage") ?? .standard
+              if let data = defaults.data(forKey: "snapshot"),
+                 let snapshot = try? JSONDecoder().decode(SharedSnapshot.self, from: data) {
+                  return snapshot
+              }
+              return SharedSnapshot(mode: .both, codex: nil, claude: nil)
+          }
+
+          struct UsageEntry: TimelineEntry {
+              let date: Date
+              let snapshot: SharedSnapshot
+          }
+
+          struct UsageProvider: TimelineProvider {
+              func placeholder(in context: Context) -> UsageEntry {
+                  UsageEntry(date: .now, snapshot: SharedSnapshot(mode: .both, codex: nil, claude: nil))
+              }
+
+              func getSnapshot(in context: Context, completion: @escaping (UsageEntry) -> Void) {
+                  completion(UsageEntry(date: .now, snapshot: loadWidgetSnapshot()))
+              }
+
+              func getTimeline(in context: Context, completion: @escaping (Timeline<UsageEntry>) -> Void) {
+                  let entry = UsageEntry(date: .now, snapshot: loadWidgetSnapshot())
+                  completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(900))))
+              }
+          }
+
+          struct UsageWidgetView: View {
+              let entry: UsageEntry
+
+              var body: some View {
+                  VStack(alignment: .leading, spacing: 7) {
+                      Text("AI Code 사용량")
+                          .font(.caption.bold())
+                          .foregroundStyle(.secondary)
+                      if entry.snapshot.mode != .claude {
+                          usageRow("Codex", entry.snapshot.codex?.weekly?.remainingPercent)
+                      }
+                      if entry.snapshot.mode != .codex {
+                          usageRow("Claude", entry.snapshot.claude?.weekly?.remainingPercent)
+                      }
+                      Text("앱에서 새로고침")
+                          .font(.caption2)
+                          .foregroundStyle(.secondary)
+                  }
+                  .containerBackground(.fill.tertiary, for: .widget)
+              }
+
+              @ViewBuilder
+              private func usageRow(_ name: String, _ percent: Int?) -> some View {
+                  HStack {
+                      Text(name).font(.headline)
+                      Spacer()
+                      Text(percent.map { "\($0)%" } ?? "--")
+                          .font(.title3.bold())
+                  }
+              }
+          }
+
+          struct UsageWidget: Widget {
+              let kind = "AICodeUsageWidget"
+
+              var body: some WidgetConfiguration {
+                  StaticConfiguration(kind: kind, provider: UsageProvider()) { entry in
+                      UsageWidgetView(entry: entry)
+                  }
+                  .configurationDisplayName("AI Code 사용량")
+                  .description("Codex와 Claude Code 잔여 사용량")
+                  .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular, .accessoryInline])
+              }
+          }
+
+          struct UsageLiveActivity: Widget {
+              var body: some WidgetConfiguration {
+                  ActivityConfiguration(for: UsageActivityAttributes.self) { context in
+                      HStack {
+                          Text("AI Code")
+                          Spacer()
+                          Text(activityLabel(context.state))
+                      }
+                      .activityBackgroundTint(.black.opacity(0.8))
+                      .activitySystemActionForegroundColor(.white)
+                  } dynamicIsland: { context in
+                      DynamicIsland {
+                          DynamicIslandExpandedRegion(.leading) {
+                              Text("CX \(context.state.codex.map(String.init) ?? "--")%")
+                          }
+                          DynamicIslandExpandedRegion(.trailing) {
+                              Text("CL \(context.state.claude.map(String.init) ?? "--")%")
+                          }
+                          DynamicIslandExpandedRegion(.bottom) {
+                              Text("Codex · Claude Code 잔여 사용량")
+                          }
+                      } compactLeading: {
+                          Text("CX")
+                      } compactTrailing: {
+                          Text("\(context.state.codex ?? context.state.claude ?? 0)%")
+                      } minimal: {
+                          Text("AI")
+                      }
+                  }
+              }
+
+              private func activityLabel(_ state: UsageActivityAttributes.ContentState) -> String {
+                  switch state.mode {
+                  case "codex":
+                      return "Codex \(state.codex.map(String.init) ?? "--")%"
+                  case "claude":
+                      return "Claude \(state.claude.map(String.init) ?? "--")%"
+                  default:
+                      return "CX \(state.codex.map(String.init) ?? "--") · CL \(state.claude.map(String.init) ?? "--")"
+                  }
+              }
+          }
+
+          @main
+          struct UsageWidgets: WidgetBundle {
+              var body: some Widget {
+                  UsageWidget()
+                  UsageLiveActivity()
+              }
+          }
+          SWIFT
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('App/CodexAPI.swift')
+          s = p.read_text()
+          s = s.replace('guard let deviceID,userCode else{', 'guard let deviceID = deviceID, let userCode = userCode else{')
+          p.write_text(s)
+          p = Path('App/ContentView.swift')
+          s = p.read_text()
+          s = s.replace('UIApplication.shared.open(x.url)', 'await UIApplication.shared.open(x.url)')
+          p.write_text(s)
+          PY
+      - name: Generate and compile iPhone app
+        working-directory: /tmp/source/codex-claude-usage-suite-v0.4.0/ios
+        run: |
+          xcodegen generate
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('AICodeUsage.xcodeproj/project.pbxproj')
+          s = p.read_text()
+          s = s.replace('objectVersion = 77;', 'objectVersion = 56;')
+          s = s.replace('preferredProjectObjectVersion = 77;', 'preferredProjectObjectVersion = 56;')
+          p.write_text(s)
+          PY
+          xcodebuild -project AICodeUsage.xcodeproj -scheme AICodeUsage -sdk iphonesimulator -configuration Release -derivedDataPath /tmp/DerivedData CODE_SIGNING_ALLOWED=NO build
+      - name: Prepare iPhone Xcode project
+        working-directory: /tmp/source/codex-claude-usage-suite-v0.4.0
+        run: zip -qr /tmp/AI-Code-Usage-iPhone-Xcode-v0.4.0.zip ios
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Code-Usage-iPhone-Xcode-v0.4.0
+          path: /tmp/AI-Code-Usage-iPhone-Xcode-v0.4.0.zip
+          if-no-files-found: error
