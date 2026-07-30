@@ -1,0 +1,72 @@
+name: Build Codex Usage v0.2.0
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "codex-usage-direct-v020.part*"
+      - ".github/workflows/build-v020.yml"
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract source
+        run: cat codex-usage-direct-v020.part* | base64 --decode > /tmp/src.zip && unzip -q /tmp/src.zip -d /tmp/src
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.9" }
+      - name: Build APK
+        working-directory: /tmp/src/codex-usage-direct-v020/android
+        run: gradle :app:assembleDebug --stacktrace
+      - name: Prepare APK
+        run: cp /tmp/src/codex-usage-direct-v020/android/app/build/outputs/apk/debug/app-debug.apk Codex-Usage-Galaxy-v0.2.0.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Codex-Usage-Galaxy-v0.2.0
+          path: Codex-Usage-Galaxy-v0.2.0.apk
+          if-no-files-found: error
+
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract source
+        run: cat codex-usage-direct-v020.part* | base64 --decode > /tmp/src.zip && unzip -q /tmp/src.zip -d /tmp/src
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Download official Codex CLI for Apple Silicon
+        working-directory: /tmp/src/codex-usage-direct-v020/mac
+        run: |
+          mkdir -p vendor
+          curl -L --fail --retry 3 https://github.com/openai/codex/releases/latest/download/codex-aarch64-apple-darwin.tar.gz -o /tmp/codex.tar.gz
+          tar -xzf /tmp/codex.tar.gz -C /tmp
+          mv /tmp/codex-aarch64-apple-darwin vendor/codex
+          chmod 755 vendor/codex
+          vendor/codex --version
+      - name: Install and test
+        working-directory: /tmp/src/codex-usage-direct-v020/mac
+        run: npm install && npm test
+      - name: Build Mac M4 app
+        working-directory: /tmp/src/codex-usage-direct-v020/mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist:mac
+      - name: Prepare artifacts
+        run: |
+          cp /tmp/src/codex-usage-direct-v020/mac/dist/*.dmg .
+          cp /tmp/src/codex-usage-direct-v020/mac/dist/*-mac.zip . || cp /tmp/src/codex-usage-direct-v020/mac/dist/*.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Codex-Usage-Mac-M4-v0.2.0
+          path: |
+            Codex-Usage-Mac-M4-v0.2.0.dmg
+            Codex-Usage-Mac-M4-v0.2.0-mac.zip
+          if-no-files-found: error
