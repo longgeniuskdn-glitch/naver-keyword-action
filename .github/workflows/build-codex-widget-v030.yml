@@ -1,0 +1,57 @@
+name: Build Codex Usage Widget v0.3.0
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "codex-usage-widget-v030.part*"
+      - ".github/workflows/build-codex-widget-v030.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Android source
+        shell: bash
+        run: |
+          cat codex-usage-widget-v030.part* | base64 --decode > /tmp/codex-widget.zip
+          unzip -q /tmp/codex-widget.zip -d /tmp/codex-widget
+          test -f /tmp/codex-widget/android/app/build.gradle.kts
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build APK
+        working-directory: /tmp/codex-widget/android
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Prepare install file
+        run: |
+          cp /tmp/codex-widget/android/app/build/outputs/apk/debug/app-debug.apk Codex-Usage-Galaxy-Widget-v0.3.0.apk
+          test -s Codex-Usage-Galaxy-Widget-v0.3.0.apk
+          sha256sum Codex-Usage-Galaxy-Widget-v0.3.0.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Codex-Usage-Galaxy-Widget-v0.3.0
+          path: Codex-Usage-Galaxy-Widget-v0.3.0.apk
+          if-no-files-found: error
