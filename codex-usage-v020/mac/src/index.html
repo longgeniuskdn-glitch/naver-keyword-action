@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Codex Usage</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;color:#111827;background:#f3f4f6}body{margin:0}.wrap{padding:24px}.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}h1{font-size:25px;margin:0}.state{font-size:13px;padding:6px 10px;border-radius:999px;background:#e5e7eb}.card{background:white;border-radius:16px;padding:20px;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.06)}.big{font-size:44px;font-weight:750;letter-spacing:-2px}.label{font-size:14px;color:#6b7280;margin-bottom:8px}.row{display:flex;gap:12px}.row .card{flex:1}.muted{color:#6b7280;font-size:13px;line-height:1.55}.actions{display:flex;gap:10px;flex-wrap:wrap}button{border:0;border-radius:10px;padding:11px 15px;font-size:14px;font-weight:650;cursor:pointer;background:#111827;color:white}button.secondary{background:#e5e7eb;color:#111827}.hidden{display:none}.error{color:#b91c1c;white-space:pre-wrap}</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header"><h1>Codex 사용량</h1><span id="state" class="state">시작 중</span></div>
+  <div id="loginCard" class="card hidden">
+    <div class="label">ChatGPT 계정 연결</div>
+    <p class="muted">처음 한 번 로그인하면 이후 자동으로 사용량을 확인합니다. Mac과 모바일은 각각 독립적으로 로그인합니다.</p>
+    <div class="actions"><button id="login">ChatGPT 로그인</button></div>
+  </div>
+  <div id="usageArea" class="hidden">
+    <div class="card"><div class="label">주간 남은 사용량</div><div id="weekly" class="big">--%</div><div id="weeklyReset" class="muted">초기화 시간 확인 중</div></div>
+    <div class="row"><div class="card"><div class="label">단기 한도</div><div id="short" class="big" style="font-size:30px">--</div></div><div class="card"><div class="label">요금제</div><div id="plan" class="big" style="font-size:25px">--</div></div></div>
+    <div class="card"><div class="actions"><button id="refresh">지금 새로고침</button><button id="official" class="secondary">공식 사용량 페이지</button><button id="logout" class="secondary">로그아웃</button></div></div>
+  </div>
+  <div id="errorCard" class="card hidden"><div class="label">확인 필요</div><div id="error" class="error"></div></div>
+  <p class="muted">메뉴 막대에는 <b>C 61%</b> 형태로 표시됩니다. 사용량 변경 알림을 받으면 즉시 반영하고, 보완을 위해 1분마다 다시 확인합니다.</p>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+function fmt(ts){if(!ts)return '초기화 시간 미표시';return new Intl.DateTimeFormat('ko-KR',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(ts*1000))+' 초기화';}
+function render(x){$('state').textContent=x.status||'확인 중';$('errorCard').classList.toggle('hidden',!x.error);$('error').textContent=x.error||'';$('loginCard').classList.toggle('hidden',x.loggedIn);$('usageArea').classList.toggle('hidden',!x.loggedIn||!x.usage);if(x.usage){$('weekly').textContent=x.usage.weekly.remainingPercent+'%';$('weeklyReset').textContent=fmt(x.usage.weekly.resetsAt);$('short').textContent=x.usage.shortTerm?x.usage.shortTerm.remainingPercent+'%':'표시 없음';$('plan').textContent=x.usage.planType||'ChatGPT';}}
+window.bridge.onState(render);window.bridge.getState().then(render);$('login').onclick=()=>window.bridge.login();$('refresh').onclick=()=>window.bridge.refresh();$('logout').onclick=()=>window.bridge.logout();$('official').onclick=()=>window.bridge.openOfficial();
+</script>
+</body>
+</html>
