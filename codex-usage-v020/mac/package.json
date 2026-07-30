@@ -1,0 +1,33 @@
+{
+  "name": "codex-usage-direct",
+  "version": "0.2.0",
+  "description": "Independent macOS Codex usage menu bar app with bundled official Codex CLI.",
+  "main": "src/main.js",
+  "author": "MyVision",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "dist:mac": "electron-builder --mac dmg zip --arm64"
+  },
+  "devDependencies": {
+    "electron": "37.2.6",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "com.myvision.codexusagedirect",
+    "productName": "Codex Usage",
+    "asar": true,
+    "files": ["src/**/*", "package.json"],
+    "extraResources": [{ "from": "vendor/codex", "to": "vendor/codex" }],
+    "afterPack": "scripts/afterPack.js",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": ["dmg", "zip"],
+      "artifactName": "Codex-Usage-Mac-M4-v${version}.${ext}",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": { "title": "Codex Usage", "sign": false }
+  }
+}
