@@ -1,0 +1,21 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="com.android.chrome" />
+        <package android:name="com.brave.browser" />
+    </queries>
+    <application
+        android:allowBackup="true"
+        android:label="Codex 사용량"
+        android:theme="@style/AppTheme"
+        android:icon="@drawable/app_icon">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
