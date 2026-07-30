@@ -10,7 +10,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Extract source
-        run: cat codex-mini.part* | base64 --decode > /tmp/app.zip && unzip -q /tmp/app.zip
+        run: |
+          cat codex-mini.part* | base64 --decode > /tmp/app.zip
+          unzip -q /tmp/app.zip
+          sed -i 's/import android.graphics.\*;/import android.graphics.*;import android.graphics.drawable.*;/' codex-apk-mini/app/src/main/java/com/myvision/codexusagebar/MainActivity.java
       - uses: actions/setup-java@v4
         with: {distribution: temurin, java-version: "17"}
       - uses: android-actions/setup-android@v3
