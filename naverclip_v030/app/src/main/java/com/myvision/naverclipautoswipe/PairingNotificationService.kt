@@ -43,7 +43,6 @@ class PairingNotificationService : Service() {
             val port = intent.getIntExtra(EXTRA_PORT, pairingPort)
             submitCode(code, host, port)
         }
-        if (intent?.action == ACTION_CANCEL) stopSelf()
         return START_NOT_STICKY
     }
 
@@ -70,7 +69,7 @@ class PairingNotificationService : Service() {
         }
         if (host.isBlank() || port !in 1..65535) {
             state = State.FAILED
-            failureMessage = "페어링 주소를 찾지 못했습니다. 새 코드를 열어주세요."
+            failureMessage = "페어링 주소를 찾지 못했습니다. 새 페어링 코드를 열어주세요."
             notificationManager.notify(NOTIFICATION_ID, buildNotification())
             return
         }
@@ -100,10 +99,10 @@ class PairingNotificationService : Service() {
 
     private fun buildNotification(): Notification {
         val (title, text) = when (state) {
-            State.WAITING -> "클립 자동넘김 · 페어링 준비됨" to "무선 디버깅에서 ‘페어링 코드로 기기 페어링’을 여세요."
-            State.READY -> "클립 자동넘김 · 6자리 코드 입력" to "설정의 코드 창은 그대로 두고 ‘코드 입력’을 눌러 6자리를 보내세요."
+            State.WAITING -> "클립 자동넘김 · 페어링 준비됨" to "무선 디버깅에서 ‘페어링 코드로 기기 페어링’을 여세요. 코드가 감지되면 이 알림에 입력 버튼이 나타납니다."
+            State.READY -> "👇 6자리 코드 입력" to "삼성의 기기 페어링 창은 그대로 두고, 이 알림의 ‘6자리 코드 입력’ 버튼을 누르세요."
             State.PAIRING -> "클립 자동넘김 · 연결 중" to "$pairingHost:$pairingPort 로 연결하고 있습니다."
-            State.FAILED -> "클립 자동넘김 · 다시 시도" to failureMessage
+            State.FAILED -> "👇 다시 6자리 코드 입력" to failureMessage
         }
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -112,15 +111,17 @@ class PairingNotificationService : Service() {
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setDefaults(Notification.DEFAULT_ALL)
             .setOnlyAlertOnce(false)
-            .setOngoing(state == State.PAIRING)
+            .setOngoing(state == State.WAITING || state == State.READY || state == State.PAIRING)
             .setContentIntent(openAppPendingIntent())
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "취소", cancelPendingIntent())
 
         if (state == State.READY || state == State.FAILED) {
             val remoteInput = RemoteInput.Builder(KEY_CODE)
-                .setLabel("6자리 코드")
+                .setLabel("6자리 코드 입력")
                 .build()
             val replyIntent = Intent(this, PairingReplyReceiver::class.java).apply {
                 action = PairingReplyReceiver.ACTION_INPUT
@@ -133,13 +134,19 @@ class PairingNotificationService : Service() {
                 replyIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
             )
-            builder.addAction(
-                NotificationCompat.Action.Builder(
-                    android.R.drawable.ic_input_add,
-                    "코드 입력",
-                    replyPendingIntent
-                ).addRemoteInput(remoteInput).build()
+            val replyAction = NotificationCompat.Action.Builder(
+                android.R.drawable.ic_input_add,
+                "6자리 코드 입력",
+                replyPendingIntent
             )
+                .addRemoteInput(remoteInput)
+                .setAllowGeneratedReplies(true)
+                .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+                .setShowsUserInterface(true)
+                .build()
+
+            // 삼성 One UI에서 액션이 접혀 숨지 않도록 입력 액션 하나만 둔다.
+            builder.addAction(replyAction)
         }
         return builder.build()
     }
@@ -160,23 +167,17 @@ class PairingNotificationService : Service() {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    private fun cancelPendingIntent(): PendingIntent = PendingIntent.getService(
-        this,
-        REQUEST_CANCEL,
-        Intent(this, PairingNotificationService::class.java).setAction(ACTION_CANCEL),
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-
     private fun createChannel() {
         if (Build.VERSION.SDK_INT < 26) return
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "최초 연결 설정",
+            "6자리 페어링 코드 입력",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "무선 디버깅 최초 페어링 코드를 입력합니다."
+            description = "무선 디버깅 최초 페어링 코드를 알림에서 직접 입력합니다."
             enableVibration(true)
             setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
         notificationManager.createNotificationChannel(channel)
     }
@@ -193,15 +194,13 @@ class PairingNotificationService : Service() {
 
     companion object {
         const val ACTION_SUBMIT_CODE = "com.myvision.naverclipautoswipe.SUBMIT_PAIR_CODE"
-        const val ACTION_CANCEL = "com.myvision.naverclipautoswipe.CANCEL_PAIR"
         const val EXTRA_CODE = "pairing_code"
         const val EXTRA_HOST = "pairing_host"
         const val EXTRA_PORT = "pairing_port"
         const val KEY_CODE = "pairing_code_reply"
-        private const val CHANNEL_ID = "pairing_notification_v034"
-        private const val NOTIFICATION_ID = 4401
-        private const val REQUEST_REPLY = 4402
-        private const val REQUEST_OPEN_APP = 4403
-        private const val REQUEST_CANCEL = 4404
+        private const val CHANNEL_ID = "pairing_notification_v035"
+        private const val NOTIFICATION_ID = 4501
+        private const val REQUEST_REPLY = 4502
+        private const val REQUEST_OPEN_APP = 4503
     }
 }
