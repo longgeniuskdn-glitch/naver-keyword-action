@@ -1,9 +1,9 @@
-name: Naver Clip AutoSwipe v0.3.3 local ADB build
+name: Naver Clip AutoSwipe v0.3.4 notification pairing build
 
 on:
   push:
     branches:
-      - "tmp/naverclip-v033-build-20260814"
+      - "tmp/naverclip-v034-build-20260814"
 
 permissions:
   contents: read
@@ -23,16 +23,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.2"
-      - name: Verify v0.3.3 non-focus pairing flow
+      - name: Verify v0.3.4 notification pairing flow
         run: |
           ! grep -R "BIND_ACCESSIBILITY_SERVICE\|AccessibilityService\|rikka.shizuku\|dev.rikka.shizuku" naverclip_v030/app/src naverclip_v030/app/build.gradle.kts
-          ! grep -R "POST_NOTIFICATIONS\|PairingService\|PairingReplyReceiver" naverclip_v030/app/src/main/AndroidManifest.xml naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/MainActivity.kt
-          ! grep -R "EditText\|InputMethodManager\|showSoftInput" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/PairingOverlayService.kt
-          grep -R "FLAG_NOT_FOCUSABLE" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/PairingOverlayService.kt
-          grep -R "127.0.0.1" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/AdbEngine.kt
-          grep -R "::1" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/AdbEngine.kt
-          grep -R "detectedHost" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/AdbEngine.kt
-          grep -R "libadb-android:3.1.0" naverclip_v030/app/build.gradle.kts
+          ! grep -R "PairingOverlayService\|EditText\|InputMethodManager\|showSoftInput" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe
+          grep -R "POST_NOTIFICATIONS" naverclip_v030/app/src/main/AndroidManifest.xml
+          grep -R "targetSdk = 33" naverclip_v030/app/build.gradle.kts
+          grep -R "RemoteInput" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/PairingNotificationService.kt
+          grep -R "코드 입력" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/PairingNotificationService.kt
+          grep -R "startForeground" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/PairingNotificationService.kt
+          grep -R "PairingReplyReceiver" naverclip_v030/app/src/main/AndroidManifest.xml
+          grep -R "WIRELESS_DEBUGGING_SETTINGS\|APPLICATION_DEVELOPMENT_SETTINGS" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/MainActivity.kt
           grep -R "15_000L+random.nextInt(15_001)" naverclip_v030/app/src/main
           grep -R "input swipe" naverclip_v030/app/src/main
       - name: Build APK
@@ -41,6 +42,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: naverclip-autoswipe-v0.3.3-apk
+          name: naverclip-autoswipe-v0.3.4-apk
           path: naverclip_v030/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
