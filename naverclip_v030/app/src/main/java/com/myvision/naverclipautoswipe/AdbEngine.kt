@@ -8,23 +8,30 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 object AdbEngine {
-    private const val LOCALHOST = "127.0.0.1"
     private val codeRegex = Regex("\\d{6}")
 
-    suspend fun pair(context: Context, codeRaw: String, port: Int): Result<Boolean> = withContext(Dispatchers.IO) {
+    suspend fun pair(
+        context: Context,
+        hostRaw: String,
+        codeRaw: String,
+        port: Int
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
+        val host = hostRaw.trim()
         val code = codeRaw.trim()
+        if (host.isBlank()) return@withContext Result.failure(Exception("페어링 기기 IP를 찾지 못했습니다."))
         if (!codeRegex.matches(code)) return@withContext Result.failure(Exception("6자리 페어링 코드를 입력해주세요."))
         if (port !in 1..65535) return@withContext Result.failure(Exception("페어링 포트를 찾지 못했습니다."))
+
         try {
             val manager = AdbConnectionManager.getInstance(context)
-            val ok = withTimeoutOrNull(20_000L) { manager.pair(LOCALHOST, port, code) }
+            val ok = withTimeoutOrNull(20_000L) { manager.pair(host, port, code) }
             when (ok) {
                 true -> Result.success(true)
-                false -> Result.failure(Exception("코드가 거부되었습니다. 새 페어링 코드로 다시 시도해주세요."))
-                null -> Result.failure(Exception("페어링 시간이 초과되었습니다."))
+                false -> Result.failure(Exception("$host:$port 에서 코드가 거부되었습니다. 새 코드를 받아 다시 시도해주세요."))
+                null -> Result.failure(Exception("$host:$port 페어링 시간이 초과되었습니다."))
             }
         } catch (t: Throwable) {
-            Result.failure(Exception("페어링에 실패했습니다. 새 코드를 받아 다시 시도해주세요.", t))
+            Result.failure(Exception("$host:$port 페어링 실패: ${t.javaClass.simpleName}", t))
         }
     }
 
