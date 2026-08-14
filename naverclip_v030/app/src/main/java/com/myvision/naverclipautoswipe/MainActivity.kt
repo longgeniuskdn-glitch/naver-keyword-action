@@ -61,7 +61,7 @@ class MainActivity : Activity() {
         root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20) })
 
         val subtitle = TextView(this).apply {
-            text = "추가 앱 없이 작동하는 v0.3.2"; setTextColor(Color.rgb(148, 163, 184)); textSize = 15f; gravity = Gravity.CENTER
+            text = "추가 앱 없이 작동하는 v0.3.3"; setTextColor(Color.rgb(148, 163, 184)); textSize = 15f; gravity = Gravity.CENTER
         }
         root.addView(subtitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
 
@@ -103,13 +103,13 @@ class MainActivity : Activity() {
         when {
             !Settings.canDrawOverlays(this) -> setState(
                 "● 플로팅 권한 필요",
-                "화면 위에 시작/중지 버튼과 최초 페어링 코드 입력창을 띄우기 위한 권한입니다.\n\n처음 한 번만 허용하면 됩니다.",
+                "화면 위에 시작/중지 버튼과 최초 페어링 숫자패드를 띄우기 위한 권한입니다.\n\n처음 한 번만 허용하면 됩니다.",
                 "① 플로팅 버튼 허용",
                 true
             )
             !adbReady -> setState(
                 "● 최초 연결 필요",
-                "아래 버튼을 누르면 무선 디버깅 설정으로 바로 이동합니다.\n\n1. 무선 디버깅을 켜기\n2. ‘페어링 코드로 기기 페어링’ 누르기\n3. 화면 아래에 뜨는 우리 입력창에 6자리 코드 입력\n\n알림은 사용하지 않습니다.",
+                "아래 버튼을 누르면 무선 디버깅 설정으로 바로 이동합니다.\n\n1. 무선 디버깅을 켜기\n2. ‘페어링 코드로 기기 페어링’ 누르기\n3. 아래 숫자패드로 6자리 코드 입력\n\n키보드를 띄우지 않아 페어링 창을 그대로 유지합니다.",
                 "② 무선 디버깅 연결",
                 true
             )
