@@ -65,7 +65,7 @@ class MainActivity : Activity() {
         root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20) })
 
         val subtitle = TextView(this).apply {
-            text = "추가 앱 없이 작동하는 v0.3.4"; setTextColor(Color.rgb(148, 163, 184)); textSize = 15f; gravity = Gravity.CENTER
+            text = "추가 앱 없이 작동하는 v0.3.6"; setTextColor(Color.rgb(148, 163, 184)); textSize = 15f; gravity = Gravity.CENTER
         }
         root.addView(subtitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
 
@@ -86,7 +86,7 @@ class MainActivity : Activity() {
         root.addView(action, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)))
 
         val footer = TextView(this).apply {
-            text = "15~30초 랜덤 · 위로 스와이프만 반복"; setTextColor(Color.rgb(100, 116, 139)); textSize = 13f; gravity = Gravity.CENTER
+            text = "15~30초 랜덤 · 사용자가 멈출 때까지 반복"; setTextColor(Color.rgb(100, 116, 139)); textSize = 13f; gravity = Gravity.CENTER
         }
         root.addView(footer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
         setContentView(root)
@@ -124,7 +124,12 @@ class MainActivity : Activity() {
                 true
             )
             else -> {
-                setState("● 준비 완료", "네이버 클립으로 이동하세요.\n떠 있는 버튼을 누르면 시작, 다시 누르면 즉시 멈춥니다.", "네이버 열기", true)
+                setState(
+                    "● 준비 완료",
+                    "네이버 클립으로 이동하세요.\n\n짧게 터치: 시작 / 일시정지\n길게 누르기: 플로팅 버튼 숨기기\n\n시작하면 15~30초 랜덤 간격으로 사용자가 멈출 때까지 계속 반복합니다.",
+                    "네이버 열기",
+                    true
+                )
                 ensureOverlay()
             }
         }
