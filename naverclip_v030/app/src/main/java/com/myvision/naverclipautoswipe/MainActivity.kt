@@ -1,12 +1,15 @@
 package com.myvision.naverclipautoswipe
 
+import android.Manifest
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
@@ -48,6 +51,7 @@ class MainActivity : Activity() {
             setPadding(dp(26), dp(42), dp(26), dp(30))
             setBackgroundColor(Color.rgb(11, 18, 32))
         }
+
         val mark = TextView(this).apply {
             text = "▶"; setTextColor(Color.WHITE); textSize = 34f; gravity = Gravity.CENTER
             background = circle(Color.rgb(34, 211, 167))
@@ -61,7 +65,7 @@ class MainActivity : Activity() {
         root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20) })
 
         val subtitle = TextView(this).apply {
-            text = "추가 앱 없이 작동하는 v0.3.3"; setTextColor(Color.rgb(148, 163, 184)); textSize = 15f; gravity = Gravity.CENTER
+            text = "추가 앱 없이 작동하는 v0.3.4"; setTextColor(Color.rgb(148, 163, 184)); textSize = 15f; gravity = Gravity.CENTER
         }
         root.addView(subtitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
 
@@ -101,16 +105,22 @@ class MainActivity : Activity() {
 
     private fun updateUi() {
         when {
-            !Settings.canDrawOverlays(this) -> setState(
-                "● 플로팅 권한 필요",
-                "화면 위에 시작/중지 버튼과 최초 페어링 숫자패드를 띄우기 위한 권한입니다.\n\n처음 한 번만 허용하면 됩니다.",
-                "① 플로팅 버튼 허용",
+            !notificationGranted() -> setState(
+                "● 연결 알림 권한 필요",
+                "최초 페어링 동안 설정 화면을 그대로 유지하기 위해 알림의 답장칸에서 6자리 코드를 입력합니다.\n\n이 권한은 최초 연결 과정에만 필요합니다.",
+                "① 연결 알림 허용",
                 true
             )
             !adbReady -> setState(
                 "● 최초 연결 필요",
-                "아래 버튼을 누르면 무선 디버깅 설정으로 바로 이동합니다.\n\n1. 무선 디버깅을 켜기\n2. ‘페어링 코드로 기기 페어링’ 누르기\n3. 아래 숫자패드로 6자리 코드 입력\n\n키보드를 띄우지 않아 페어링 창을 그대로 유지합니다.",
-                "② 무선 디버깅 연결",
+                "아래 버튼을 누르면 먼저 ‘페어링 준비됨’ 알림을 띄운 뒤 무선 디버깅으로 이동합니다.\n\n1. ‘페어링 코드로 기기 페어링’ 누르기\n2. 코드 창은 그대로 둔 채 상단 알림창 내리기\n3. ‘코드 입력’에 6자리 입력 후 전송\n\n설정의 페어링 창을 누르거나 닫지 마세요.",
+                "② 연결 시작",
+                true
+            )
+            !Settings.canDrawOverlays(this) -> setState(
+                "● 플로팅 버튼 권한 필요",
+                "네이버 클립 위에 시작/중지 버튼 하나를 띄우기 위한 권한입니다.",
+                "③ 플로팅 버튼 허용",
                 true
             )
             else -> {
@@ -122,10 +132,21 @@ class MainActivity : Activity() {
 
     private fun doNext() {
         when {
-            !Settings.canDrawOverlays(this) -> startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            !notificationGranted() -> {
+                if (Build.VERSION.SDK_INT >= 33) {
+                    requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+                }
+            }
             !adbReady -> {
-                startService(Intent(this, PairingOverlayService::class.java))
-                openWirelessDebuggingSettings()
+                val service = Intent(this, PairingNotificationService::class.java)
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(service) else startService(service)
+                scope.launch {
+                    delay(650)
+                    openWirelessDebuggingSettings()
+                }
+            }
+            !Settings.canDrawOverlays(this) -> {
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             }
             else -> {
                 ensureOverlay()
@@ -134,6 +155,14 @@ class MainActivity : Activity() {
                 else startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.nhn.android.search")))
             }
         }
+    }
+
+    private fun notificationGranted(): Boolean =
+        Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_NOTIFICATIONS) updateUi()
     }
 
     private fun openWirelessDebuggingSettings() {
@@ -158,10 +187,20 @@ class MainActivity : Activity() {
     }
 
     private fun setState(badge: String, body: String, button: String, enabled: Boolean) {
-        status.text = badge; status.setTextColor(Color.rgb(110, 231, 183)); status.background = rounded(Color.rgb(6, 78, 59), dp(99))
-        guide.text = body; action.text = button; action.isEnabled = enabled; action.alpha = if (enabled) 1f else .55f
+        status.text = badge
+        status.setTextColor(Color.rgb(110, 231, 183))
+        status.background = rounded(Color.rgb(6, 78, 59), dp(99))
+        guide.text = body
+        action.text = button
+        action.isEnabled = enabled
+        action.alpha = if (enabled) 1f else .55f
     }
+
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply { setColor(color); cornerRadius = radius.toFloat() }
     private fun circle(color: Int) = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) }
     private fun dp(v: Int) = Math.round(v * resources.displayMetrics.density)
+
+    companion object {
+        private const val REQUEST_NOTIFICATIONS = 84
+    }
 }
