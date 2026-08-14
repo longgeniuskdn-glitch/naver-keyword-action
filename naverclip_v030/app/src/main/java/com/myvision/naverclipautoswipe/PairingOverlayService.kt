@@ -23,6 +23,7 @@ class PairingOverlayService : Service() {
     private var windowManager: WindowManager? = null
     private var panel: LinearLayout? = null
     private var mdns: AdbMdns? = null
+    private var pairingHost = ""
     private var pairingPort = 0
     private lateinit var statusText: TextView
     private lateinit var codeInput: EditText
@@ -122,11 +123,12 @@ class PairingOverlayService : Service() {
     }
 
     private fun startDiscovery() {
-        mdns = AdbMdns(this, AdbMdns.TLS_PAIRING) { port ->
-            if (port > 0) {
+        mdns = AdbMdns(this, AdbMdns.TLS_PAIRING) { host, port ->
+            if (host.isNotBlank() && port > 0) {
+                pairingHost = host
                 pairingPort = port
                 scope.launch {
-                    statusText.text = "6자리 코드가 감지됐습니다. 아래에 그대로 입력하세요."
+                    statusText.text = "페어링 주소 $host:$port 감지 · 6자리 코드를 입력하세요."
                     statusText.setTextColor(Color.rgb(110, 231, 183))
                     codeInput.isEnabled = true
                     connectButton.isEnabled = true
@@ -142,8 +144,8 @@ class PairingOverlayService : Service() {
 
     private fun submitCode() {
         val code = codeInput.text?.toString()?.trim().orEmpty()
-        if (pairingPort <= 0) {
-            statusText.text = "아직 페어링 화면을 찾지 못했습니다. 페어링 코드 창을 열어주세요."
+        if (pairingHost.isBlank() || pairingPort <= 0) {
+            statusText.text = "아직 페어링 주소를 찾지 못했습니다. 페어링 코드 창을 다시 열어주세요."
             return
         }
         if (!Regex("\\d{6}").matches(code)) {
@@ -153,9 +155,9 @@ class PairingOverlayService : Service() {
 
         codeInput.isEnabled = false
         connectButton.isEnabled = false
-        statusText.text = "연결 중…"
+        statusText.text = "$pairingHost:$pairingPort 연결 중…"
         scope.launch {
-            AdbEngine.pair(this@PairingOverlayService, code, pairingPort)
+            AdbEngine.pair(this@PairingOverlayService, pairingHost, code, pairingPort)
                 .onSuccess {
                     statusText.text = "연결 등록 완료 · 잠시 후 앱으로 돌아갑니다."
                     statusText.setTextColor(Color.rgb(110, 231, 183))
@@ -168,7 +170,7 @@ class PairingOverlayService : Service() {
                     stopSelf()
                 }
                 .onFailure { error ->
-                    statusText.text = error.message ?: "연결 실패 · 새 코드를 받아 다시 시도해주세요."
+                    statusText.text = error.message ?: "$pairingHost:$pairingPort 연결 실패"
                     statusText.setTextColor(Color.rgb(253, 186, 116))
                     codeInput.text?.clear()
                     codeInput.isEnabled = true
