@@ -12,27 +12,48 @@ object AdbEngine {
 
     suspend fun pair(
         context: Context,
-        hostRaw: String,
+        detectedHostRaw: String,
         codeRaw: String,
         port: Int
     ): Result<Boolean> = withContext(Dispatchers.IO) {
-        val host = hostRaw.trim()
+        val detectedHost = detectedHostRaw.trim()
         val code = codeRaw.trim()
-        if (host.isBlank()) return@withContext Result.failure(Exception("페어링 기기 IP를 찾지 못했습니다."))
         if (!codeRegex.matches(code)) return@withContext Result.failure(Exception("6자리 페어링 코드를 입력해주세요."))
         if (port !in 1..65535) return@withContext Result.failure(Exception("페어링 포트를 찾지 못했습니다."))
 
-        try {
-            val manager = AdbConnectionManager.getInstance(context)
-            val ok = withTimeoutOrNull(20_000L) { manager.pair(host, port, code) }
-            when (ok) {
-                true -> Result.success(true)
-                false -> Result.failure(Exception("$host:$port 에서 코드가 거부되었습니다. 새 코드를 받아 다시 시도해주세요."))
-                null -> Result.failure(Exception("$host:$port 페어링 시간이 초과되었습니다."))
+        val candidates = linkedSetOf<String>().apply {
+            add("127.0.0.1")
+            if (detectedHost.isNotBlank()) add(detectedHost)
+            add("::1")
+        }.toList()
+
+        val failures = mutableListOf<String>()
+        val manager = AdbConnectionManager.getInstance(context)
+
+        for (host in candidates) {
+            try {
+                val ok = withTimeoutOrNull(10_000L) { manager.pair(host, port, code) }
+                when (ok) {
+                    true -> {
+                        context.getSharedPreferences("local_adb_route", Context.MODE_PRIVATE)
+                            .edit().putString("last_pair_host", host).apply()
+                        return@withContext Result.success(true)
+                    }
+                    false -> return@withContext Result.failure(
+                        Exception("$host:$port 에 연결됐지만 코드가 거부되었습니다. 새 코드를 받아 다시 시도해주세요.")
+                    )
+                    null -> return@withContext Result.failure(
+                        Exception("$host:$port 페어링 응답이 없어 시간이 초과되었습니다.")
+                    )
+                }
+            } catch (t: Throwable) {
+                failures += "$host=${t.javaClass.simpleName}"
             }
-        } catch (t: Throwable) {
-            Result.failure(Exception("$host:$port 페어링 실패: ${t.javaClass.simpleName}", t))
         }
+
+        Result.failure(
+            Exception("페어링 포트에 연결하지 못했습니다. 시도: ${failures.joinToString(", ")}")
+        )
     }
 
     suspend fun isReady(context: Context): Boolean = withContext(Dispatchers.IO) {
