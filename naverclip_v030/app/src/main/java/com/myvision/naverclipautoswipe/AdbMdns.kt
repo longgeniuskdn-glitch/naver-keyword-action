@@ -4,15 +4,12 @@ import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.util.Log
-import java.io.IOException
-import java.net.InetSocketAddress
 import java.net.NetworkInterface
-import java.net.ServerSocket
 
 class AdbMdns(
     context: Context,
     private val serviceType: String,
-    private val callback: (Int) -> Unit
+    private val callback: (String, Int) -> Unit
 ) {
     private val manager = context.getSystemService(NsdManager::class.java)
     private var running = false
@@ -24,30 +21,44 @@ class AdbMdns(
             registered = true
             if (!running) unregister()
         }
+
         override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
             Log.w(TAG, "Discovery start failed: $errorCode")
         }
+
         override fun onDiscoveryStopped(serviceType: String) { registered = false }
         override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) { registered = false }
+
         override fun onServiceFound(serviceInfo: NsdServiceInfo) {
             try {
                 manager.resolveService(serviceInfo, object : NsdManager.ResolveListener {
                     override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) = Unit
+
                     override fun onServiceResolved(info: NsdServiceInfo) {
                         if (!running) return
-                        val isLocal = NetworkInterface.getNetworkInterfaces().asSequence().any { ni ->
-                            ni.inetAddresses.asSequence().any { it.hostAddress == info.host.hostAddress }
+                        val host = info.host?.hostAddress.orEmpty()
+                        if (host.isBlank() || info.port !in 1..65535) return
+
+                        val isThisDevice = try {
+                            NetworkInterface.getNetworkInterfaces().asSequence().any { ni ->
+                                ni.inetAddresses.asSequence().any { addr -> addr.hostAddress == host }
+                            }
+                        } catch (_: Throwable) {
+                            false
                         }
-                        if (isLocal && isPortListening(info.port)) {
+
+                        if (isThisDevice) {
                             serviceName = info.serviceName
-                            callback(info.port)
+                            Log.i(TAG, "Resolved $serviceType at $host:${info.port}")
+                            callback(host, info.port)
                         }
                     }
                 })
             } catch (_: Throwable) { }
         }
+
         override fun onServiceLost(serviceInfo: NsdServiceInfo) {
-            if (serviceInfo.serviceName == serviceName) callback(-1)
+            if (serviceInfo.serviceName == serviceName) callback("", -1)
         }
     }
 
@@ -68,11 +79,6 @@ class AdbMdns(
         registered = false
         try { manager.stopServiceDiscovery(listener) } catch (_: Throwable) { }
     }
-
-    private fun isPortListening(port: Int): Boolean = try {
-        ServerSocket().use { it.bind(InetSocketAddress("127.0.0.1", port), 1) }
-        false
-    } catch (_: IOException) { true }
 
     companion object {
         const val TLS_CONNECT = "_adb-tls-connect._tcp"
