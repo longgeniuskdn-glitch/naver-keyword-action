@@ -1,4 +1,4 @@
-name: Naver Clip AutoSwipe v0.3.8 minimum retry interval build
+name: Naver Clip AutoSwipe v0.3.8 exact 15-30s build
 
 on:
   push:
@@ -23,14 +23,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.2"
-      - name: Verify v0.3.8 minimum interval guarantee
+      - name: Verify v0.3.8 exact 15-30 second rule
         run: |
           ! grep -R "BIND_ACCESSIBILITY_SERVICE\|AccessibilityService\|rikka.shizuku\|dev.rikka.shizuku" naverclip_v030/app/src naverclip_v030/app/build.gradle.kts
           grep -R "versionName = \"0.3.8\"" naverclip_v030/app/build.gradle.kts
-          grep -R "30_000L + random.nextInt(30_001)" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt
-          grep -R "15_000L + random.nextInt(15_001)" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt
-          ! grep -R "RETRY_DELAY_MS = 2_000L" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt
-          grep -R "재시도도 최소 15초" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/MainActivity.kt
+          test "$(grep -c '15_000L + random.nextInt(15_001)' naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt)" -eq 2
+          ! grep -R "30_000L + random.nextInt(30_001)\|RETRY_DELAY_MS = 2_000L" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt
+          grep -R "15~30초 랜덤 · 최소 15초 / 최대 30초" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/MainActivity.kt
           grep -R "scheduleRetry()" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt
           grep -R "hideFloatingButton" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt
           grep -R "input swipe" naverclip_v030/app/src/main
