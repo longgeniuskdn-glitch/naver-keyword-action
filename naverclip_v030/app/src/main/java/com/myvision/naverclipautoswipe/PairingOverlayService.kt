@@ -8,12 +8,9 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.IBinder
 import android.provider.Settings
-import android.text.InputFilter
 import android.view.Gravity
 import android.view.WindowManager
-import android.view.inputmethod.InputMethodManager
 import android.widget.Button
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import kotlinx.coroutines.*
@@ -25,8 +22,9 @@ class PairingOverlayService : Service() {
     private var mdns: AdbMdns? = null
     private var pairingHost = ""
     private var pairingPort = 0
+    private val codeBuffer = StringBuilder()
     private lateinit var statusText: TextView
-    private lateinit var codeInput: EditText
+    private lateinit var codeDisplay: TextView
     private lateinit var connectButton: Button
 
     override fun onCreate() {
@@ -43,7 +41,7 @@ class PairingOverlayService : Service() {
     private fun showPanel() {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(14), dp(18), dp(14))
+            setPadding(dp(14), dp(12), dp(14), dp(12))
             background = rounded(Color.rgb(15, 23, 42), dp(18))
             elevation = dp(12).toFloat()
         }
@@ -59,30 +57,34 @@ class PairingOverlayService : Service() {
         statusText = TextView(this).apply {
             text = "무선 디버깅에서 ‘페어링 코드로 기기 페어링’을 눌러주세요."
             setTextColor(Color.rgb(203, 213, 225))
-            textSize = 14f
-            setPadding(0, dp(7), 0, dp(10))
+            textSize = 13f
+            setPadding(0, dp(5), 0, dp(7))
         }
         box.addView(statusText)
 
-        val row = LinearLayout(this).apply {
+        codeDisplay = TextView(this).apply {
+            text = "— — — — — —"
+            setTextColor(Color.WHITE)
+            textSize = 22f
+            gravity = Gravity.CENTER
+            setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+            setPadding(0, dp(3), 0, dp(7))
+            background = rounded(Color.rgb(30, 41, 59), dp(12))
+        }
+        box.addView(codeDisplay, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)))
+
+        addDigitRow(box, listOf("1", "2", "3", "4", "5"))
+        addDigitRow(box, listOf("6", "7", "8", "9", "0"))
+
+        val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        val erase = makeKey("⌫").apply { setOnClickListener { backspace() } }
+        actionRow.addView(erase, LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(6) })
 
-        codeInput = EditText(this).apply {
-            hint = "6자리 코드"
-            setHintTextColor(Color.rgb(100, 116, 139))
-            setTextColor(Color.WHITE)
-            textSize = 19f
-            gravity = Gravity.CENTER
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER
-            filters = arrayOf(InputFilter.LengthFilter(6))
-            isSingleLine = true
-            isEnabled = false
-            background = rounded(Color.rgb(30, 41, 59), dp(12))
-            setPadding(dp(10), 0, dp(10), 0)
-        }
-        row.addView(codeInput, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(8) })
+        val clear = makeKey("지우기").apply { setOnClickListener { clearCode() } }
+        actionRow.addView(clear, LinearLayout.LayoutParams(0, dp(46), 1f).apply { rightMargin = dp(6) })
 
         connectButton = Button(this).apply {
             text = "연결"
@@ -93,15 +95,15 @@ class PairingOverlayService : Service() {
             background = rounded(Color.rgb(34, 211, 167), dp(12))
             setOnClickListener { submitCode() }
         }
-        row.addView(connectButton, LinearLayout.LayoutParams(dp(84), dp(52)))
-        box.addView(row)
+        actionRow.addView(connectButton, LinearLayout.LayoutParams(0, dp(46), 1.35f))
+        box.addView(actionRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
 
         val cancel = TextView(this).apply {
             text = "취소"
             setTextColor(Color.rgb(148, 163, 184))
-            textSize = 13f
+            textSize = 12f
             gravity = Gravity.END
-            setPadding(0, dp(8), 0, 0)
+            setPadding(0, dp(6), 0, 0)
             setOnClickListener { stopSelf() }
         }
         box.addView(cancel)
@@ -110,16 +112,64 @@ class PairingOverlayService : Service() {
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = dp(24)
-            width = resources.displayMetrics.widthPixels - dp(24)
+            y = dp(12)
+            width = resources.displayMetrics.widthPixels - dp(18)
         }
 
         panel = box
         windowManager?.addView(box, params)
+    }
+
+    private fun addDigitRow(parent: LinearLayout, digits: List<String>) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        digits.forEachIndexed { index, digit ->
+            val button = makeKey(digit).apply { setOnClickListener { appendDigit(digit) } }
+            row.addView(button, LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+                if (index < digits.lastIndex) rightMargin = dp(5)
+            })
+        }
+        parent.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+    }
+
+    private fun makeKey(label: String) = Button(this).apply {
+        text = label
+        isAllCaps = false
+        textSize = 15f
+        setTextColor(Color.WHITE)
+        background = rounded(Color.rgb(30, 41, 59), dp(10))
+        setPadding(0, 0, 0, 0)
+    }
+
+    private fun appendDigit(digit: String) {
+        if (codeBuffer.length >= 6) return
+        codeBuffer.append(digit)
+        updateCodeDisplay()
+    }
+
+    private fun backspace() {
+        if (codeBuffer.isNotEmpty()) codeBuffer.deleteCharAt(codeBuffer.length - 1)
+        updateCodeDisplay()
+    }
+
+    private fun clearCode() {
+        codeBuffer.setLength(0)
+        updateCodeDisplay()
+    }
+
+    private fun updateCodeDisplay() {
+        val slots = (0 until 6).joinToString(" ") { i -> if (i < codeBuffer.length) codeBuffer[i].toString() else "—" }
+        codeDisplay.text = slots
+        connectButton.isEnabled = codeBuffer.length == 6 && pairingPort > 0
+        connectButton.alpha = if (connectButton.isEnabled) 1f else .55f
     }
 
     private fun startDiscovery() {
@@ -128,24 +178,25 @@ class PairingOverlayService : Service() {
                 pairingHost = host
                 pairingPort = port
                 scope.launch {
-                    statusText.text = "페어링 주소 $host:$port 감지 · 6자리 코드를 입력하세요."
+                    statusText.text = "페어링 주소 $host:$port 감지 · 아래 숫자패드로 6자리를 입력하세요."
                     statusText.setTextColor(Color.rgb(110, 231, 183))
-                    codeInput.isEnabled = true
-                    connectButton.isEnabled = true
-                    codeInput.requestFocus()
-                    try {
-                        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-                        imm.showSoftInput(codeInput, InputMethodManager.SHOW_IMPLICIT)
-                    } catch (_: Throwable) { }
+                    updateCodeDisplay()
+                }
+            } else {
+                pairingPort = 0
+                scope.launch {
+                    statusText.text = "페어링 창이 닫혔습니다. ‘페어링 코드로 기기 페어링’을 다시 눌러주세요."
+                    statusText.setTextColor(Color.rgb(253, 186, 116))
+                    updateCodeDisplay()
                 }
             }
         }.also { it.start() }
     }
 
     private fun submitCode() {
-        val code = codeInput.text?.toString()?.trim().orEmpty()
-        if (pairingHost.isBlank() || pairingPort <= 0) {
-            statusText.text = "아직 페어링 주소를 찾지 못했습니다. 페어링 코드 창을 다시 열어주세요."
+        val code = codeBuffer.toString()
+        if (pairingPort <= 0) {
+            statusText.text = "페어링 포트를 찾지 못했습니다. 페어링 코드 창을 다시 열어주세요."
             return
         }
         if (!Regex("\\d{6}").matches(code)) {
@@ -153,9 +204,9 @@ class PairingOverlayService : Service() {
             return
         }
 
-        codeInput.isEnabled = false
         connectButton.isEnabled = false
-        statusText.text = "$pairingHost:$pairingPort 연결 중…"
+        statusText.text = "페어링 경로를 자동으로 찾는 중…"
+        statusText.setTextColor(Color.rgb(203, 213, 225))
         scope.launch {
             AdbEngine.pair(this@PairingOverlayService, pairingHost, code, pairingPort)
                 .onSuccess {
@@ -170,11 +221,9 @@ class PairingOverlayService : Service() {
                     stopSelf()
                 }
                 .onFailure { error ->
-                    statusText.text = error.message ?: "$pairingHost:$pairingPort 연결 실패"
+                    statusText.text = error.message ?: "연결 실패"
                     statusText.setTextColor(Color.rgb(253, 186, 116))
-                    codeInput.text?.clear()
-                    codeInput.isEnabled = true
-                    connectButton.isEnabled = true
+                    clearCode()
                 }
         }
     }
