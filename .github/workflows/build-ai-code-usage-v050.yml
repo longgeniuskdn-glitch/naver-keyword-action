@@ -121,7 +121,9 @@ jobs:
           New-Item vendor -ItemType Directory -Force | Out-Null
           Invoke-WebRequest -Uri "https://github.com/openai/codex/releases/latest/download/codex-x86_64-pc-windows-msvc.exe.zip" -OutFile "$env:RUNNER_TEMP\codex.zip"
           Expand-Archive "$env:RUNNER_TEMP\codex.zip" "$env:RUNNER_TEMP\codex" -Force
-          $exe=Get-ChildItem "$env:RUNNER_TEMP\codex" -Recurse -Filter "codex*.exe" | Select-Object -First 1
+          Get-ChildItem "$env:RUNNER_TEMP\codex" -Recurse -File | Select-Object FullName,Length
+          $exe = Get-ChildItem "$env:RUNNER_TEMP\codex" -Recurse -File | Where-Object { $_.Name -eq "codex-x86_64-pc-windows-msvc.exe" } | Select-Object -First 1
+          if (-not $exe) { throw "Official Codex CLI executable not found in release archive" }
           Copy-Item $exe.FullName vendor\codex.exe
           Copy-Item claude-statusline.ps1 vendor\claude-statusline.ps1
           .\vendor\codex.exe --version
