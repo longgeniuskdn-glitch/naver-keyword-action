@@ -83,7 +83,7 @@ class OverlayService : Service() {
     private fun scheduleNext() {
         handler.removeCallbacksAndMessages(null)
         if (!running) return
-        val delayMs = 15_000L + random.nextInt(15_001)
+        val delayMs = 30_000L + random.nextInt(30_001)
         handler.postDelayed({ performSwipe() }, delayMs)
     }
 
@@ -104,7 +104,6 @@ class OverlayService : Service() {
             withContext(Dispatchers.Main) {
                 if (!running) return@withContext
                 if (result.isFailure) {
-                    // ADB가 순간적으로 끊겨도 사용자가 멈출 때까지 자동으로 재연결/재시도한다.
                     scheduleRetry()
                 } else {
                     scheduleNext()
