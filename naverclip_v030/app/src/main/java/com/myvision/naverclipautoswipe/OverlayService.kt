@@ -90,7 +90,9 @@ class OverlayService : Service() {
     private fun scheduleRetry() {
         handler.removeCallbacksAndMessages(null)
         if (!running) return
-        handler.postDelayed({ performSwipe() }, RETRY_DELAY_MS)
+        // 재연결 경로에서도 절대 15초보다 빨리 다음 스와이프를 시도하지 않는다.
+        val retryDelayMs = 15_000L + random.nextInt(15_001)
+        handler.postDelayed({ performSwipe() }, retryDelayMs)
     }
 
     private fun performSwipe() {
@@ -232,7 +234,6 @@ class OverlayService : Service() {
     companion object {
         private const val CHANNEL = "autoswipe_runtime"
         private const val NOTIFICATION_ID = 4301
-        private const val RETRY_DELAY_MS = 2_000L
         private const val LONG_PRESS_MS = 750L
     }
 }
