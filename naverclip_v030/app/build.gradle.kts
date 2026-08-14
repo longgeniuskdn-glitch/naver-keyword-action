@@ -10,9 +10,9 @@ android {
     defaultConfig {
         applicationId = "com.myvision.naverclipautoswipe"
         minSdk = 30
-        targetSdk = 30
-        versionCode = 9
-        versionName = "0.3.3"
+        targetSdk = 33
+        versionCode = 10
+        versionName = "0.3.4"
     }
 
     buildTypes {
