@@ -14,9 +14,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: Restore source
         run: |
-          cat ai-code-usage-v050.chunk* | tr -d '[:space:]' | base64 --decode > /tmp/source.zip
-          ACTUAL=$(shasum -a 256 /tmp/source.zip | awk '{print $1}')
-          test "$ACTUAL" = "1a801110f75301d2e934aa31f57d7c0b8907df0632732ca87d56c5ed6a9fe36c"
+          python3 - <<'PY'
+          import base64, glob, hashlib, re, sys
+          all_clean = ''
+          for f in sorted(glob.glob('ai-code-usage-v050.chunk*')):
+              raw = open(f, encoding='utf-8').read()
+              clean = re.sub(r'\s+', '', raw)
+              bad = ''.join(ch for ch in clean if ch not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
+              print(f, 'len=', len(clean), 'sha=', hashlib.sha256(clean.encode()).hexdigest(), 'bad=', repr(bad[:40]))
+              all_clean += clean
+          data = base64.b64decode(all_clean, validate=False)
+          actual = hashlib.sha256(data).hexdigest()
+          print('decoded_sha=', actual, 'bytes=', len(data))
+          open('/tmp/source.zip','wb').write(data)
+          if actual != '1a801110f75301d2e934aa31f57d7c0b8907df0632732ca87d56c5ed6a9fe36c':
+              sys.exit('source SHA mismatch')
+          PY
           unzip -q /tmp/source.zip -d /tmp/src
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "17" }
