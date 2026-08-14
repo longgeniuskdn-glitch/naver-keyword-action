@@ -61,7 +61,7 @@ class MainActivity : Activity() {
         root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20) })
 
         val subtitle = TextView(this).apply {
-            text = "추가 앱 없이 작동하는 v0.3.1"; setTextColor(Color.rgb(148, 163, 184)); textSize = 15f; gravity = Gravity.CENTER
+            text = "추가 앱 없이 작동하는 v0.3.2"; setTextColor(Color.rgb(148, 163, 184)); textSize = 15f; gravity = Gravity.CENTER
         }
         root.addView(subtitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
 
