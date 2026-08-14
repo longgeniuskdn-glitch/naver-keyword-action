@@ -1,14 +1,12 @@
 package com.myvision.naverclipautoswipe
 
-import android.Manifest
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.Gravity
@@ -28,8 +26,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.rgb(11,18,32)
-        window.navigationBarColor = Color.rgb(11,18,32)
+        window.statusBarColor = Color.rgb(11, 18, 32)
+        window.navigationBarColor = Color.rgb(11, 18, 32)
         buildUi()
     }
 
@@ -48,45 +46,45 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(26), dp(42), dp(26), dp(30))
-            setBackgroundColor(Color.rgb(11,18,32))
+            setBackgroundColor(Color.rgb(11, 18, 32))
         }
         val mark = TextView(this).apply {
             text = "▶"; setTextColor(Color.WHITE); textSize = 34f; gravity = Gravity.CENTER
-            background = circle(Color.rgb(34,211,167))
+            background = circle(Color.rgb(34, 211, 167))
         }
-        root.addView(mark, LinearLayout.LayoutParams(dp(80),dp(80)))
+        root.addView(mark, LinearLayout.LayoutParams(dp(80), dp(80)))
 
         val title = TextView(this).apply {
             text = "클립 자동넘김"; setTextColor(Color.WHITE); textSize = 27f; gravity = Gravity.CENTER
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
         }
-        root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin=dp(20) })
+        root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20) })
 
         val subtitle = TextView(this).apply {
-            text = "추가 앱 없이 작동하는 v0.3"; setTextColor(Color.rgb(148,163,184)); textSize=15f; gravity=Gravity.CENTER
+            text = "추가 앱 없이 작동하는 v0.3.1"; setTextColor(Color.rgb(148, 163, 184)); textSize = 15f; gravity = Gravity.CENTER
         }
-        root.addView(subtitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin=dp(8) })
+        root.addView(subtitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
 
         status = TextView(this).apply {
-            gravity=Gravity.CENTER; textSize=15f; setTypeface(Typeface.DEFAULT, Typeface.BOLD); setPadding(dp(16),dp(10),dp(16),dp(10))
+            gravity = Gravity.CENTER; textSize = 15f; setTypeface(Typeface.DEFAULT, Typeface.BOLD); setPadding(dp(16), dp(10), dp(16), dp(10))
         }
-        root.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin=dp(26) })
+        root.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(26) })
 
         guide = TextView(this).apply {
-            setTextColor(Color.rgb(226,232,240)); textSize=18f; gravity=Gravity.CENTER; setLineSpacing(0f,1.24f)
+            setTextColor(Color.rgb(226, 232, 240)); textSize = 18f; gravity = Gravity.CENTER; setLineSpacing(0f, 1.24f)
         }
-        root.addView(guide, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f).apply { topMargin=dp(28) })
+        root.addView(guide, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(28) })
 
         action = Button(this).apply {
-            isAllCaps=false; textSize=18f; setTypeface(Typeface.DEFAULT,Typeface.BOLD); setTextColor(Color.rgb(11,18,32))
-            background=rounded(Color.rgb(34,211,167),dp(18)); setOnClickListener { doNext() }
+            isAllCaps = false; textSize = 18f; setTypeface(Typeface.DEFAULT, Typeface.BOLD); setTextColor(Color.rgb(11, 18, 32))
+            background = rounded(Color.rgb(34, 211, 167), dp(18)); setOnClickListener { doNext() }
         }
-        root.addView(action, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(60)))
+        root.addView(action, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)))
 
-        val footer=TextView(this).apply {
-            text="15~30초 랜덤 · 위로 스와이프만 반복"; setTextColor(Color.rgb(100,116,139)); textSize=13f; gravity=Gravity.CENTER
+        val footer = TextView(this).apply {
+            text = "15~30초 랜덤 · 위로 스와이프만 반복"; setTextColor(Color.rgb(100, 116, 139)); textSize = 13f; gravity = Gravity.CENTER
         }
-        root.addView(footer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin=dp(14) })
+        root.addView(footer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
         setContentView(root)
     }
 
@@ -103,9 +101,18 @@ class MainActivity : Activity() {
 
     private fun updateUi() {
         when {
-            !notificationGranted() -> setState("● 알림 권한 필요", "처음 연결할 때 6자리 코드를 입력하기 위해 알림을 한 번 사용합니다.", "① 알림 허용", true)
-            !adbReady -> setState("● 최초 연결 필요", "버튼을 누르면 개발자 옵션이 열립니다.\n\n무선 디버깅을 켠 뒤\n‘페어링 코드로 기기 페어링’을 누르고,\n상단 알림의 ‘코드 입력’에 6자리를 적어주세요.\n\n이 과정은 처음 한 번만 하면 됩니다.", "② 연결 설정 시작", true)
-            !Settings.canDrawOverlays(this) -> setState("● 플로팅 버튼 권한 필요", "네이버 클립 위에 시작/중지 버튼 하나를 띄우기 위한 권한입니다.", "③ 플로팅 버튼 허용", true)
+            !Settings.canDrawOverlays(this) -> setState(
+                "● 플로팅 권한 필요",
+                "화면 위에 시작/중지 버튼과 최초 페어링 코드 입력창을 띄우기 위한 권한입니다.\n\n처음 한 번만 허용하면 됩니다.",
+                "① 플로팅 버튼 허용",
+                true
+            )
+            !adbReady -> setState(
+                "● 최초 연결 필요",
+                "아래 버튼을 누르면 무선 디버깅 설정으로 바로 이동합니다.\n\n1. 무선 디버깅을 켜기\n2. ‘페어링 코드로 기기 페어링’ 누르기\n3. 화면 아래에 뜨는 우리 입력창에 6자리 코드 입력\n\n알림은 사용하지 않습니다.",
+                "② 무선 디버깅 연결",
+                true
+            )
             else -> {
                 setState("● 준비 완료", "네이버 클립으로 이동하세요.\n떠 있는 버튼을 누르면 시작, 다시 누르면 즉시 멈춥니다.", "네이버 열기", true)
                 ensureOverlay()
@@ -115,15 +122,11 @@ class MainActivity : Activity() {
 
     private fun doNext() {
         when {
-            !notificationGranted() -> {
-                if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 80)
-            }
-            !adbReady -> {
-                startForegroundService(Intent(this, PairingService::class.java))
-                try { startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) }
-                catch (_: Throwable) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
-            }
             !Settings.canDrawOverlays(this) -> startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            !adbReady -> {
+                startService(Intent(this, PairingOverlayService::class.java))
+                openWirelessDebuggingSettings()
+            }
             else -> {
                 ensureOverlay()
                 val naver = packageManager.getLaunchIntentForPackage("com.nhn.android.search")
@@ -133,24 +136,32 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun notificationGranted(): Boolean = Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        refresh()
+    private fun openWirelessDebuggingSettings() {
+        val intents = listOf(
+            Intent("android.settings.WIRELESS_DEBUGGING_SETTINGS"),
+            Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$WirelessDebuggingActivity")),
+            Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
+            Intent(Settings.ACTION_SETTINGS)
+        )
+        for (intent in intents) {
+            try {
+                if (intent.resolveActivity(packageManager) != null) {
+                    startActivity(intent)
+                    return
+                }
+            } catch (_: Throwable) { }
+        }
     }
 
     private fun ensureOverlay() {
-        if (Settings.canDrawOverlays(this)) startForegroundService(Intent(this, OverlayService::class.java))
+        if (Settings.canDrawOverlays(this)) startService(Intent(this, OverlayService::class.java))
     }
 
-    private fun setState(badge:String, body:String, button:String, enabled:Boolean) {
-        status.text=badge; status.setTextColor(Color.rgb(110,231,183)); status.background=rounded(Color.rgb(6,78,59),dp(99))
-        guide.text=body; action.text=button; action.isEnabled=enabled; action.alpha=if(enabled)1f else .55f
+    private fun setState(badge: String, body: String, button: String, enabled: Boolean) {
+        status.text = badge; status.setTextColor(Color.rgb(110, 231, 183)); status.background = rounded(Color.rgb(6, 78, 59), dp(99))
+        guide.text = body; action.text = button; action.isEnabled = enabled; action.alpha = if (enabled) 1f else .55f
     }
-    private fun rounded(color:Int,radius:Int)=GradientDrawable().apply{setColor(color);cornerRadius=radius.toFloat()}
-    private fun circle(color:Int)=GradientDrawable().apply{shape=GradientDrawable.OVAL;setColor(color)}
-    private fun dp(v:Int)=Math.round(v*resources.displayMetrics.density)
-
-    companion object { const val EXTRA_FROM_PAIRING="from_pairing" }
+    private fun rounded(color: Int, radius: Int) = GradientDrawable().apply { setColor(color); cornerRadius = radius.toFloat() }
+    private fun circle(color: Int) = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) }
+    private fun dp(v: Int) = Math.round(v * resources.displayMetrics.density)
 }
