@@ -86,7 +86,7 @@ class MainActivity : Activity() {
         root.addView(action, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)))
 
         val footer = TextView(this).apply {
-            text = "정상 30~60초 · 재시도도 최소 15초"; setTextColor(Color.rgb(100, 116, 139)); textSize = 13f; gravity = Gravity.CENTER
+            text = "15~30초 랜덤 · 최소 15초 / 최대 30초"; setTextColor(Color.rgb(100, 116, 139)); textSize = 13f; gravity = Gravity.CENTER
         }
         root.addView(footer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
         setContentView(root)
@@ -126,7 +126,7 @@ class MainActivity : Activity() {
             else -> {
                 setState(
                     "● 준비 완료",
-                    "네이버 클립으로 이동하세요.\n\n짧게 터치: 시작 / 일시정지\n길게 누르기: 플로팅 버튼 숨기기\n\n정상 동작은 30~60초 랜덤 간격입니다. 연결 오류가 나도 재시도는 반드시 최소 15초 이후에만 실행합니다.",
+                    "네이버 클립으로 이동하세요.\n\n짧게 터치: 시작 / 일시정지\n길게 누르기: 플로팅 버튼 숨기기\n\n정상 동작과 오류 재시도 모두 15~30초 랜덤입니다. 어떤 경우에도 15초보다 빠르거나 30초를 넘지 않습니다.",
                     "네이버 열기",
                     true
                 )
