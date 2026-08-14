@@ -1,0 +1,7 @@
+MyVision Naver Clip AutoSwipe v0.3.0
+
+This build uses code patterns from anyapk (sam1am/anyapk), licensed under Apache License 2.0,
+and AdbMdns patterns originating from Shizuku, also Apache License 2.0.
+Dependencies include libadb-android, Conscrypt, and sun-security-android.
+
+No AccessibilityService is declared or used. No Shizuku dependency is included.
