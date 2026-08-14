@@ -1,9 +1,9 @@
-name: Naver Clip AutoSwipe v0.3.0 local ADB build
+name: Naver Clip AutoSwipe v0.3.1 local ADB build
 
 on:
   push:
     branches:
-      - "tmp/naverclip-v030-build-20260814"
+      - "tmp/naverclip-v031-build-20260814"
 
 permissions:
   contents: read
@@ -23,10 +23,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.2"
-      - name: Verify no accessibility or Shizuku
+      - name: Verify v0.3.1 flow
         run: |
           ! grep -R "BIND_ACCESSIBILITY_SERVICE\|AccessibilityService\|rikka.shizuku\|dev.rikka.shizuku" naverclip_v030/app/src naverclip_v030/app/build.gradle.kts
+          ! grep -R "POST_NOTIFICATIONS\|PairingService\|PairingReplyReceiver" naverclip_v030/app/src/main/AndroidManifest.xml naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/MainActivity.kt
           grep -R "libadb-android:3.1.0" naverclip_v030/app/build.gradle.kts
+          grep -R "PairingOverlayService" naverclip_v030/app/src/main
+          grep -R "WIRELESS_DEBUGGING_SETTINGS\|APPLICATION_DEVELOPMENT_SETTINGS" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/MainActivity.kt
           grep -R "15_000L+random.nextInt(15_001)" naverclip_v030/app/src/main
           grep -R "input swipe" naverclip_v030/app/src/main
       - name: Build APK
@@ -35,6 +38,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: naverclip-autoswipe-v0.3.0-apk
+          name: naverclip-autoswipe-v0.3.1-apk
           path: naverclip_v030/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
