@@ -1,9 +1,9 @@
-name: Naver Clip AutoSwipe v0.3.4 notification pairing build
+name: Naver Clip AutoSwipe v0.3.6 continuous loop build
 
 on:
   push:
     branches:
-      - "tmp/naverclip-v034-build-20260814"
+      - "tmp/naverclip-v036-build-20260814"
 
 permissions:
   contents: read
@@ -23,25 +23,24 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.2"
-      - name: Verify v0.3.4 notification pairing flow
+      - name: Verify v0.3.6 loop and hide controls
         run: |
           ! grep -R "BIND_ACCESSIBILITY_SERVICE\|AccessibilityService\|rikka.shizuku\|dev.rikka.shizuku" naverclip_v030/app/src naverclip_v030/app/build.gradle.kts
-          ! grep -R "PairingOverlayService\|EditText\|InputMethodManager\|showSoftInput" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe
-          grep -R "POST_NOTIFICATIONS" naverclip_v030/app/src/main/AndroidManifest.xml
-          grep -R "targetSdk = 33" naverclip_v030/app/build.gradle.kts
-          grep -R "RemoteInput" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/PairingNotificationService.kt
-          grep -R "코드 입력" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/PairingNotificationService.kt
-          grep -R "startForeground" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/PairingNotificationService.kt
-          grep -R "PairingReplyReceiver" naverclip_v030/app/src/main/AndroidManifest.xml
-          grep -R "WIRELESS_DEBUGGING_SETTINGS\|APPLICATION_DEVELOPMENT_SETTINGS" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/MainActivity.kt
-          grep -R "15_000L+random.nextInt(15_001)" naverclip_v030/app/src/main
+          grep -R "versionName = \"0.3.6\"" naverclip_v030/app/build.gradle.kts
+          grep -R "15_000L + random.nextInt(15_001)" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt
+          grep -R "scheduleRetry()" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt
+          ! grep -R "result.isFailure) setRunning(false)" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt
+          grep -R "hideFloatingButton" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt
+          grep -R "LONG_PRESS_MS" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt
+          grep -R "버튼을 숨겼습니다" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/OverlayService.kt
           grep -R "input swipe" naverclip_v030/app/src/main
+          grep -R "RemoteInput" naverclip_v030/app/src/main/java/com/myvision/naverclipautoswipe/PairingNotificationService.kt
       - name: Build APK
         working-directory: naverclip_v030
         run: gradle --no-daemon :app:assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: naverclip-autoswipe-v0.3.4-apk
+          name: naverclip-autoswipe-v0.3.6-apk
           path: naverclip_v030/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
