@@ -1,0 +1,40 @@
+name: Naver Clip AutoSwipe v0.3.0 local ADB build
+
+on:
+  push:
+    branches:
+      - "tmp/naverclip-v030-build-20260814"
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK 34
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.2"
+      - name: Verify no accessibility or Shizuku
+        run: |
+          ! grep -R "BIND_ACCESSIBILITY_SERVICE\|AccessibilityService\|rikka.shizuku\|dev.rikka.shizuku" naverclip_v030/app/src naverclip_v030/app/build.gradle.kts
+          grep -R "libadb-android:3.1.0" naverclip_v030/app/build.gradle.kts
+          grep -R "15_000L+random.nextInt(15_001)" naverclip_v030/app/src/main
+          grep -R "input swipe" naverclip_v030/app/src/main
+      - name: Build APK
+        working-directory: naverclip_v030
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: naverclip-autoswipe-v0.3.0-apk
+          path: naverclip_v030/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
