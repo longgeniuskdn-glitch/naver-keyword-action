@@ -83,14 +83,15 @@ class OverlayService : Service() {
     private fun scheduleNext() {
         handler.removeCallbacksAndMessages(null)
         if (!running) return
-        val delayMs = 30_000L + random.nextInt(30_001)
+        // 정상 동작도 반드시 15~30초 사이에서만 다음 스와이프를 실행한다.
+        val delayMs = 15_000L + random.nextInt(15_001)
         handler.postDelayed({ performSwipe() }, delayMs)
     }
 
     private fun scheduleRetry() {
         handler.removeCallbacksAndMessages(null)
         if (!running) return
-        // 재연결 경로에서도 절대 15초보다 빨리 다음 스와이프를 시도하지 않는다.
+        // 재연결 경로도 동일하게 15~30초. 15초 미만/30초 초과 금지.
         val retryDelayMs = 15_000L + random.nextInt(15_001)
         handler.postDelayed({ performSwipe() }, retryDelayMs)
     }
