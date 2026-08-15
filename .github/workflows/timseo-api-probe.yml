@@ -1,0 +1,31 @@
+name: TimSEOGuru Public API Probe
+
+on:
+  push:
+    branches:
+      - chatgpt-timseo-longform-analysis-20260816
+    paths:
+      - scripts/timseo_public_api_probe.py
+      - .github/workflows/timseo-api-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet requests
+      - run: python scripts/timseo_public_api_probe.py
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TimSEOGuru-public-api-probe
+          path: public_api_probe.json
+          if-no-files-found: warn
+          retention-days: 3
