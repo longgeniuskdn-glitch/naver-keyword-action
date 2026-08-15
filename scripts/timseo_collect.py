@@ -1,2 +1,171 @@
-import base64,zlib
-exec(compile(zlib.decompress(base64.b64decode('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')).decode("utf-8"),"timseo_collect_inner.py","exec"))
+#!/usr/bin/env python3
+from __future__ import annotations
+import csv, html, json, os, re, time, traceback
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+import requests, yt_dlp, pytesseract
+from PIL import Image, ImageEnhance, ImageOps
+try:
+    from youtube_transcript_api import YouTubeTranscriptApi
+except Exception:
+    YouTubeTranscriptApi = None
+
+URL=os.getenv('CHANNEL_URL','https://www.youtube.com/@TimSEOGuru/videos')
+OUT=Path(os.getenv('OUTPUT_DIR','out'))
+BATCH_TOTAL=max(1,int(os.getenv('BATCH_TOTAL','1')))
+BATCH_INDEX=int(os.getenv('BATCH_INDEX','0'))
+UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36'
+STOP=set('a an and are as at be by for from how i in is it my of on or that the this to with you your we what why when can will get use using into without not do does did'.split())
+
+
+def clean(v:Any)->str:return re.sub(r'\s+',' ',html.unescape(str(v or ''))).strip()
+def words(s:str)->list[str]:return [x.lower() for x in re.findall(r"[A-Za-z0-9][A-Za-z0-9+'-]*",s) if len(x)>1 and x.lower() not in STOP]
+def num(v:Any)->int:
+    try:return int(float(v or 0))
+    except:return 0
+def hms(v:Any)->str:
+    s=num(v); h,r=divmod(s,3600); m,s=divmod(r,60); return f'{h}:{m:02}:{s:02}' if h else f'{m}:{s:02}'
+def urls(s:str)->list[str]:return list(dict.fromkeys(re.findall(r'https?://[^\s<>()\[\]{}]+',s or '')))
+def intent(t:str)->str:
+    x=t.lower()
+    if re.search(r'\b(vs|versus|comparison|better than|alternative)\b',x):return '비교·선택형'
+    if re.search(r'\b(case study|results?|traffic|revenue|\$|visitors?|clicks?|from 0)\b',x):return '사례·성과형'
+    if re.search(r'\b(mistake|avoid|warning|stop|never|wrong|dead|destroy|kill)\b',x):return '위험·반론형'
+    if re.search(r'\b(best|top \d+|tools?|apps?|prompts?|hacks?)\b',x):return '목록·추천형'
+    if re.search(r'\b(update|news|202[0-9]|new|latest|just)\b',x):return '업데이트·시의성형'
+    if re.search(r'\b(how to|tutorial|step by step|guide|build|create|use|setup)\b',x):return '튜토리얼·문제해결형'
+    return '전략·해설형'
+def title_strategy(t:str)->str:
+    x=t.lower(); a=[]
+    if 'how to' in x or x.startswith('how i'):a.append('How-to/실행 검색어')
+    if re.search(r'\d',t):a.append('숫자·시간·금액으로 구체화')
+    if re.search(r'\b202[0-9]\b',t):a.append('연도·최신성 신호')
+    if re.search(r'\b(best|top|free|secret|exact|insane|crazy|guaranteed|ultimate)\b',x):a.append('강한 효익·감정 단어')
+    if re.search(r'\b(stop|never|wrong|dead|warning|destroy|kill|truth)\b',x):a.append('손실회피·반전')
+    if '(' in t or '[' in t:a.append('괄호 속 추가 약속')
+    return '; '.join(a or ['핵심 주제를 전면에 둔 직접형'])
+def primary_topic(t:str,tags:list[str])->str:
+    x=t.lower()
+    for p in ['programmatic seo','local seo','technical seo','link building','backlinks','keyword research','youtube seo','ai seo','claude code','chatgpt','google maps','seo','automation','content']:
+        if p in x:return p.title() if p!='seo' else 'SEO'
+    return clean(tags[0]) if tags else (words(t)[0].title() if words(t) else 'SEO')
+def top_terms(s:str,n=12)->str:return ', '.join(k for k,_ in Counter(words(s)).most_common(n))
+
+
+def ydl_opts(flat=False)->dict[str,Any]:
+    return {'quiet':True,'no_warnings':True,'skip_download':True,'ignoreerrors':True,
+      'extract_flat':'in_playlist' if flat else False,'socket_timeout':40,'retries':4,
+      'extractor_args':{'youtube':{'player_client':['web','android_vr'],'skip':['hls','dash','translated_subs']}}}
+def list_videos()->list[dict[str,Any]]:
+    with yt_dlp.YoutubeDL(ydl_opts(True)) as y:data=y.extract_info(URL,download=False) or {}
+    out=[]; seen=set()
+    for e in data.get('entries') or []:
+        if e and e.get('id') and e['id'] not in seen:seen.add(e['id']);out.append(e)
+    return out
+def details(vid:str)->tuple[dict[str,Any],str]:
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts()) as y:return y.extract_info(f'https://www.youtube.com/watch?v={vid}',download=False) or {},''
+    except Exception as e:return {},f'{type(e).__name__}: {e}'
+
+
+def captions(info:dict[str,Any],vid:str)->tuple[list[dict[str,Any]],str,str]:
+    tracks=info.get('subtitles') or info.get('automatic_captions') or {}
+    for lang in ['en','en-US','en-GB']+list(tracks):
+        for tr in tracks.get(lang) or []:
+            if tr.get('ext')!='json3' or not tr.get('url'):continue
+            try:
+                data=requests.get(tr['url'],headers={'User-Agent':UA},timeout=30).json(); out=[]
+                for ev in data.get('events') or []:
+                    text=clean(''.join(x.get('utf8','') for x in ev.get('segs') or []))
+                    if text:out.append({'text':text,'start':(ev.get('tStartMs') or 0)/1000,'duration':(ev.get('dDurationMs') or 0)/1000})
+                if out:return out,lang,'yt-dlp caption URL'
+            except Exception:pass
+    if YouTubeTranscriptApi:
+        try:
+            api=YouTubeTranscriptApi(); tl=api.list(vid); chosen=None
+            try:chosen=tl.find_transcript(['en','en-US','en-GB'])
+            except Exception:
+                all_tracks=list(tl); chosen=all_tracks[0] if all_tracks else None
+            if chosen:
+                out=[]
+                for x in chosen.fetch():
+                    if hasattr(x,'text'):out.append({'text':clean(x.text),'start':float(x.start),'duration':float(x.duration)})
+                    else:out.append({'text':clean(x.get('text')),'start':float(x.get('start',0)),'duration':float(x.get('duration',0))})
+                if out:return out,getattr(chosen,'language_code',''),'youtube-transcript-api'
+        except Exception as e:return [],'',f'{type(e).__name__}: {e}'
+    return [],'','no public captions'
+
+
+def thumbnail(info:dict[str,Any],vid:str)->tuple[str,str,str]:
+    dest=OUT/'thumbnails'/f'{vid}.jpg'; err=''
+    for u in [info.get('thumbnail'),f'https://i.ytimg.com/vi/{vid}/maxresdefault.jpg',f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg']:
+        if not u:continue
+        try:
+            r=requests.get(u,headers={'User-Agent':UA},timeout=25); r.raise_for_status()
+            if len(r.content)<2000:continue
+            dest.write_bytes(r.content)
+            with Image.open(dest) as im:
+                im=im.convert('RGB'); scale=max(1,1400/max(im.width,1)); im=im.resize((int(im.width*scale),int(im.height*scale)))
+                g=ImageEnhance.Contrast(ImageOps.grayscale(im)).enhance(2.1)
+                text=clean(pytesseract.image_to_string(g,config='--psm 11',lang='eng'))[:400]
+            return u,text,''
+        except Exception as e:err=f'{type(e).__name__}: {e}'
+    return '','',err
+
+
+def make_row(flat:dict[str,Any],info:dict[str,Any],meta_err:str)->tuple[dict[str,Any],list[dict[str,Any]]]:
+    vid=str(flat['id']); title=clean(info.get('title') or flat.get('title')); desc=str(info.get('description') or '')
+    dur=num(info.get('duration') or flat.get('duration')); views=num(info.get('view_count') or flat.get('view_count')); likes=num(info.get('like_count'))
+    date=clean(info.get('upload_date') or flat.get('upload_date')); date=f'{date[:4]}-{date[4:6]}-{date[6:]}' if len(date)==8 and date.isdigit() else date
+    tags=[clean(x) for x in info.get('tags') or [] if clean(x)]; chapters=info.get('chapters') or []
+    snips,lang,tr_src=captions(info,vid); full=clean(' '.join(x['text'] for x in snips)); first=clean(' '.join(x['text'] for x in snips if x['start']<60)); ending=full[-1800:]
+    thumb_url,ocr,thumb_err=thumbnail(info,vid); durls=urls(desc); tks=words(title); oset=set(words(ocr)); tset=set(tks); overlap=round(len(oset&tset)/len(oset|tset),3) if oset and tset else 0
+    hook=[]
+    if re.search(r"\b(in this video|today|i'll show|i will show|you'll learn|we're going to)\b",first.lower()):hook.append('초반 결과 약속')
+    if re.search(r'\b(problem|mistake|wrong|fail|traffic|rank|revenue|\$|thousand|million)\b',first.lower()):hook.append('문제·수치·증거 선제시')
+    if any(w in first.lower() for w in tks[:5]):hook.append('제목 핵심어 음성 반복')
+    strengths=[]; gaps=[]
+    if len(title)<=70:strengths.append('검색결과 절단 위험 낮은 제목')
+    if chapters:strengths.append('챕터로 구간 탐색 강화')
+    if len(desc.split())>=80:strengths.append('설명란 문맥 충분')
+    if snips:strengths.append('자막으로 주제 문맥 축적')
+    if dur>=480 and not chapters:gaps.append('긴 영상인데 챕터 없음')
+    if not snips:gaps.append('공개 자막 미확보')
+    if not durls:gaps.append('설명란 전환 링크 미확인')
+    return {
+      'video_id':vid,'video_url':f'https://www.youtube.com/watch?v={vid}','title':title,'upload_date':date,'duration_seconds':dur,'duration':hms(dur),'view_count':views,'like_count':likes,
+      'primary_topic':primary_topic(title,tags),'search_intent':intent(title),'title_chars':len(title),'title_words':len(title.split()),'title_has_number':bool(re.search(r'\d',title)),'title_has_year':bool(re.search(r'\b202[0-9]\b',title)),'title_strategy':title_strategy(title),
+      'thumbnail_url':thumb_url,'thumbnail_file':f'thumbnails/{vid}.jpg','thumbnail_ocr':ocr,'thumbnail_words':len(words(ocr)),'thumbnail_title_overlap':overlap,'thumbnail_strategy':('짧은 대형 문구' if len(words(ocr))<=5 else '설명형 문구')+('; 제목과 다른 보조 후킹' if overlap<.25 else '; 제목 핵심어 반복'),
+      'description_first_220':clean(desc)[:220],'description_words':len(desc.split()),'description_url_count':len(durls),'description_urls':'\n'.join(durls),'chapter_count':len(chapters),'chapter_titles':' | '.join(clean(x.get('title')) for x in chapters),'tag_count':len(tags),'tags':', '.join(tags),
+      'transcript_status':'ok' if snips else 'missing','transcript_language':lang,'transcript_source':tr_src,'transcript_words':len(full.split()),'transcript_first_60s':first[:2200],'transcript_last_90s':ending,'transcript_top_terms':top_terms(full),'hook_formula':'; '.join(hook or ['자막 미확보 또는 배경설명형']),
+      'cta_pattern':f"설명란 링크 {len(durls)}개; "+(', '.join(x for x in ['subscribe','comment','download','newsletter','course','link below','watch next'] if x in (desc+' '+ending).lower()) or '명시적 CTA 약함'),
+      'seo_strengths':'; '.join(strengths or ['명확한 단일 주제']),'seo_weaknesses':'; '.join(gaps or ['큰 구조적 약점 미확인']),'apply_to_myvision':f"‘{primary_topic(title,tags)}’ 한 주제에 {intent(title)} 제목 적용; 첫 60초 문제→결과→증거; 설명란 첫 3줄 요약+단일 CTA",
+      'metadata_error':meta_err,'transcript_error':'' if snips else tr_src,'thumbnail_error':thumb_err,
+    },snips
+
+
+def main()->int:
+    for d in [OUT,OUT/'metadata',OUT/'transcripts',OUT/'thumbnails']:d.mkdir(parents=True,exist_ok=True)
+    entries=list_videos(); assigned=entries[BATCH_INDEX::BATCH_TOTAL]
+    print(f'[CHANNEL] {len(entries)} [BATCH] {BATCH_INDEX}/{BATCH_TOTAL} assigned={len(assigned)}',flush=True)
+    (OUT/'00_flat_entries.json').write_text(json.dumps(assigned,ensure_ascii=False,indent=2,default=str),encoding='utf-8')
+    rows=[]; errors=[]
+    for i,e in enumerate(assigned,1):
+        vid=str(e['id']); print(f'[{i}/{len(assigned)}] {vid}',flush=True)
+        try:
+            info,err=details(vid); row,snips=make_row(e,info,err); rows.append(row)
+            keep={k:info.get(k) for k in ['id','title','description','duration','upload_date','view_count','like_count','tags','chapters','thumbnail','width','height','live_status','language']}
+            (OUT/'metadata'/f'{vid}.json').write_text(json.dumps(keep,ensure_ascii=False,indent=2,default=str),encoding='utf-8')
+            (OUT/'transcripts'/f'{vid}.json').write_text(json.dumps(snips,ensure_ascii=False,indent=2),encoding='utf-8')
+            (OUT/'transcripts'/f'{vid}.txt').write_text(clean(' '.join(x['text'] for x in snips)),encoding='utf-8')
+        except Exception as ex:errors.append({'video_id':vid,'error':f'{type(ex).__name__}: {ex}','traceback':traceback.format_exc()[-2500:]})
+        time.sleep(.25)
+    fields=list(rows[0]) if rows else []
+    with (OUT/'01_longform_video_analysis.csv').open('w',encoding='utf-8-sig',newline='') as f:
+        w=csv.DictWriter(f,fieldnames=fields,quoting=csv.QUOTE_ALL); w.writeheader(); w.writerows(rows)
+    (OUT/'99_errors.json').write_text(json.dumps(errors,ensure_ascii=False,indent=2),encoding='utf-8')
+    (OUT/'collection_summary.json').write_text(json.dumps({'videos_tab_count':len(entries),'batch_index':BATCH_INDEX,'batch_total':BATCH_TOTAL,'assigned_count':len(assigned),'rows':len(rows),'errors':len(errors),'collected_utc':datetime.now(timezone.utc).isoformat()},ensure_ascii=False,indent=2),encoding='utf-8')
+    print(f'[DONE] rows={len(rows)} errors={len(errors)}',flush=True); return 0
+if __name__=='__main__':raise SystemExit(main())
