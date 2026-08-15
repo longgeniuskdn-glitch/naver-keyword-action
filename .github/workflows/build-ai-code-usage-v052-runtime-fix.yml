@@ -1,0 +1,165 @@
+name: Build AI Code Usage v0.5.2 Runtime Fix
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/build-ai-code-usage-v052-runtime-fix.yml"
+      - "ai-code-usage-v050.chunk*"
+permissions:
+  contents: read
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ai-code-usage-v050.chunk* | tr -d '[:space:]' | base64 --decode > /tmp/source.zip
+          ACTUAL=$(shasum -a 256 /tmp/source.zip | awk '{print $1}')
+          test "$ACTUAL" = "1a801110f75301d2e934aa31f57d7c0b8907df0632732ca87d56c5ed6a9fe36c"
+          unzip -q /tmp/source.zip -d /tmp/src
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Fix runtime syntax and version
+        working-directory: /tmp/src/src/desktop
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('main.js')
+          s=p.read_text()
+          needle="  setTimeout(refreshAll,800);setInterval(()=>{refreshClaude();if(modeShows('codex'))codex.refresh();else updateUi()},60000);\napp.on('before-quit'"
+          repl="  setTimeout(refreshAll,800);setInterval(()=>{refreshClaude();if(modeShows('codex'))codex.refresh();else updateUi()},60000);\n});\napp.on('before-quit'"
+          if needle in s:
+              s=s.replace(needle,repl,1)
+          p.write_text(s)
+          for f in [Path('package.json')]:
+              t=f.read_text().replace('0.5.0','0.5.2')
+              f.write_text(t)
+          PY
+          node --check main.js
+          grep -n "app.whenReady" -A8 main.js
+      - name: Prepare Codex and Claude helper
+        working-directory: /tmp/src/src/desktop
+        run: |
+          mkdir -p vendor
+          curl -L --fail --retry 3 https://github.com/openai/codex/releases/latest/download/codex-aarch64-apple-darwin.tar.gz -o /tmp/codex.tar.gz
+          tar -xzf /tmp/codex.tar.gz -C /tmp
+          cp /tmp/codex-aarch64-apple-darwin vendor/codex
+          chmod 755 vendor/codex
+          swiftc claude_capture.swift -o vendor/claude-capture
+          chmod 755 vendor/claude-capture
+      - name: Test Claude capture
+        working-directory: /tmp/src/src/desktop
+        run: |
+          printf '%s' '{"version":"2.1.90","rate_limits":{"five_hour":{"used_percentage":23.5,"resets_at":1738425600},"seven_day":{"used_percentage":41.2,"resets_at":1738857600}}}' | vendor/claude-capture | grep 'CL 5h 24% · 7d 41%'
+      - name: Build Mac
+        working-directory: /tmp/src/src/desktop
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: "false" }
+        run: |
+          npm install
+          npm test
+          npm run dist:mac
+      - name: Make launcher package
+        run: |
+          mkdir -p /tmp/launcher
+          APPZIP=$(find /tmp/src/src/desktop/dist -maxdepth 1 -name '*.zip' | head -1)
+          unzip -q "$APPZIP" -d /tmp/launcher
+          cat > '/tmp/launcher/AI Code Usage 실행.command' <<'SH'
+          #!/bin/zsh
+          set -u
+          HERE="$(cd "$(dirname "$0")" && pwd)"
+          SOURCE="$HERE/AI Code Usage.app"
+          TARGET_DIR="$HOME/Applications"
+          TARGET="$TARGET_DIR/AI Code Usage.app"
+          LOG="$HOME/Desktop/AI-Code-Usage-Launcher.log"
+          exec > >(tee -a "$LOG") 2>&1
+          echo "[$(date)] launcher start"
+          if [ ! -d "$SOURCE" ]; then
+            osascript -e 'display alert "AI Code Usage 실행 오류" message "AI Code Usage.app 파일이 런처 옆에 없습니다." as critical'
+            exit 1
+          fi
+          xattr -dr com.apple.quarantine "$HERE" 2>/dev/null || true
+          mkdir -p "$TARGET_DIR"
+          rm -rf "$TARGET"
+          ditto "$SOURCE" "$TARGET"
+          xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
+          chmod +x "$TARGET/Contents/MacOS/AI Code Usage" 2>/dev/null || true
+          chmod +x "$TARGET/Contents/Resources/vendor/codex" 2>/dev/null || true
+          chmod +x "$TARGET/Contents/Resources/vendor/claude-capture" 2>/dev/null || true
+          open -n "$TARGET"
+          sleep 3
+          if ! pgrep -f "$TARGET/Contents/MacOS/AI Code Usage" >/dev/null 2>&1; then
+            echo "open failed; direct launch fallback"
+            nohup "$TARGET/Contents/MacOS/AI Code Usage" >> "$LOG" 2>&1 &
+            sleep 3
+          fi
+          if pgrep -f "$TARGET/Contents/MacOS/AI Code Usage" >/dev/null 2>&1; then
+            osascript -e 'display notification "AI Code Usage가 실행되었습니다." with title "AI Code Usage"' 2>/dev/null || true
+          else
+            osascript -e 'display alert "AI Code Usage 실행 실패" message "바탕화면의 AI-Code-Usage-Launcher.log 파일을 확인하세요." as critical'
+            open -R "$LOG" 2>/dev/null || true
+            exit 1
+          fi
+          SH
+          chmod +x '/tmp/launcher/AI Code Usage 실행.command'
+          cat > '/tmp/launcher/먼저 읽기.txt' <<'TXT'
+          1. AI Code Usage 실행.command 를 더블클릭하세요.
+          2. macOS가 처음 차단하면 우클릭 > 열기 를 한 번 선택하세요.
+          3. 실행 실패 시 바탕화면 AI-Code-Usage-Launcher.log 를 확인하세요.
+          TXT
+          cd /tmp/launcher
+          zip -qry "$GITHUB_WORKSPACE/AI-Code-Usage-Launcher-Mac-M4-v0.5.2.zip" .
+          unzip -tq "$GITHUB_WORKSPACE/AI-Code-Usage-Launcher-Mac-M4-v0.5.2.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Code-Usage-Launcher-Mac-M4-v0.5.2
+          path: AI-Code-Usage-Launcher-Mac-M4-v0.5.2.zip
+
+  windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        shell: powershell
+        run: |
+          $raw=(((Get-Content ai-code-usage-v050.chunk* -Raw) -join '')) -replace '\s',''
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\source.zip",[Convert]::FromBase64String($raw))
+          Expand-Archive "$env:RUNNER_TEMP\source.zip" "$env:RUNNER_TEMP\src" -Force
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Fix runtime syntax and version
+        shell: powershell
+        working-directory: ${{ runner.temp }}\src\src\desktop
+        run: |
+          $p='main.js'
+          $s=Get-Content $p -Raw
+          $needle="  setTimeout(refreshAll,800);setInterval(()=>{refreshClaude();if(modeShows('codex'))codex.refresh();else updateUi()},60000);`napp.on('before-quit'"
+          $repl="  setTimeout(refreshAll,800);setInterval(()=>{refreshClaude();if(modeShows('codex'))codex.refresh();else updateUi()},60000);`n});`napp.on('before-quit'"
+          if($s.Contains($needle)){ $s=$s.Replace($needle,$repl) }
+          Set-Content $p $s -NoNewline
+          (Get-Content package.json -Raw).Replace('0.5.0','0.5.2') | Set-Content package.json -NoNewline
+          node --check main.js
+      - name: Prepare dependencies
+        shell: powershell
+        working-directory: ${{ runner.temp }}\src\src\desktop
+        run: |
+          New-Item vendor -ItemType Directory -Force | Out-Null
+          Copy-Item claude-statusline.ps1 vendor\claude-statusline.ps1
+      - name: Build Windows
+        shell: powershell
+        working-directory: ${{ runner.temp }}\src\src\desktop
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: "false" }
+        run: |
+          npm install
+          npm test
+          npm run dist:win
+      - name: Collect launcher
+        shell: powershell
+        run: |
+          $portable=Get-ChildItem "$env:RUNNER_TEMP\src\src\desktop\dist" -Filter '*Portable*.exe' | Select-Object -First 1
+          if(-not $portable){ throw 'Portable EXE not found' }
+          Copy-Item $portable.FullName "$PWD\AI-Code-Usage-Launcher-Windows-v0.5.2.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Code-Usage-Launcher-Windows-v0.5.2
+          path: AI-Code-Usage-Launcher-Windows-v0.5.2.exe
