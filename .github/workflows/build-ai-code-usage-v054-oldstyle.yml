@@ -1,0 +1,84 @@
+name: Build AI Code Usage v0.5.4 Old Style DMG
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/build-ai-code-usage-v054-oldstyle.yml"
+      - "ai-code-usage-v050.chunk*"
+permissions:
+  contents: read
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ai-code-usage-v050.chunk* | tr -d '[:space:]' | base64 --decode > /tmp/source.zip
+          unzip -q /tmp/source.zip -d /tmp/src
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Restore v0.2 style packaging and fix runtime
+        working-directory: /tmp/src/src/desktop
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('main.js')
+          s=p.read_text()
+          needle="  setTimeout(refreshAll,800);setInterval(()=>{refreshClaude();if(modeShows('codex'))codex.refresh();else updateUi()},60000);\napp.on('before-quit'"
+          repl="  setTimeout(refreshAll,800);setInterval(()=>{refreshClaude();if(modeShows('codex'))codex.refresh();else updateUi()},60000);\n});\napp.on('before-quit'"
+          if needle in s:
+              s=s.replace(needle,repl,1)
+          p.write_text(s)
+          pkg=json.loads(Path('package.json').read_text())
+          pkg['version']='0.5.4'
+          pkg['scripts']['dist:mac']='electron-builder --mac dmg zip --arm64'
+          b=pkg.setdefault('build',{})
+          b['afterPack']='scripts/afterPack.js'
+          mac=b.setdefault('mac',{})
+          mac['category']='public.app-category.developer-tools'
+          mac['target']=['dmg','zip']
+          mac['artifactName']='AI-Code-Usage-Mac-M4-v${version}.${ext}'
+          mac['hardenedRuntime']=False
+          mac['gatekeeperAssess']=False
+          b['dmg']={'title':'AI Code Usage','sign':False}
+          Path('package.json').write_text(json.dumps(pkg, ensure_ascii=False, indent=2))
+          Path('scripts').mkdir(exist_ok=True)
+          Path('scripts/afterPack.js').write_text("""'use strict';\nconst { execFileSync } = require('child_process');\nconst path = require('path');\nmodule.exports = async function afterPack(context) {\n  if (context.electronPlatformName !== 'darwin') return;\n  const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);\n  execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', appPath], { stdio: 'inherit' });\n};\n""")
+          PY
+          node --check main.js
+      - name: Prepare official Codex and Claude helper
+        working-directory: /tmp/src/src/desktop
+        run: |
+          mkdir -p vendor
+          curl -L --fail --retry 3 https://github.com/openai/codex/releases/latest/download/codex-aarch64-apple-darwin.tar.gz -o /tmp/codex.tar.gz
+          tar -xzf /tmp/codex.tar.gz -C /tmp
+          cp /tmp/codex-aarch64-apple-darwin vendor/codex
+          chmod 755 vendor/codex
+          swiftc claude_capture.swift -o vendor/claude-capture
+          chmod 755 vendor/claude-capture
+      - name: Install test and build
+        working-directory: /tmp/src/src/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm install
+          npm test
+          npm run dist:mac
+      - name: Verify old-style app signature and outputs
+        working-directory: /tmp/src/src/desktop
+        run: |
+          APP=$(find dist -type d -name '*.app' | head -1)
+          test -n "$APP"
+          codesign --verify --deep --strict "$APP"
+          codesign -dv --verbose=2 "$APP" 2>&1 | head -30
+          file "$APP/Contents/MacOS/AI Code Usage" || true
+          ls -lh dist/*.dmg dist/*.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Code-Usage-Mac-M4-v0.5.4-OldStyle
+          path: |
+            /tmp/src/src/desktop/dist/*.dmg
+            /tmp/src/src/desktop/dist/*.zip
+          if-no-files-found: error
