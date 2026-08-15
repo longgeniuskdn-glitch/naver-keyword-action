@@ -4,7 +4,8 @@ on:
     branches: [ main ]
     paths:
       - "ai-code-usage-v050.chunk*"
-      - "tools/patch-ai-code-usage-v055.py"
+      - "tools/patch-ai-code-usage-v055b.py"
+      - "tools/claude-capture-v055.swift"
       - ".github/workflows/build-ai-code-usage-v055-claude-diagnostics.yml"
 permissions:
   contents: read
@@ -23,10 +24,10 @@ jobs:
         with: { node-version: "22" }
       - name: Apply Claude diagnostics patch
         run: |
-          python3 tools/patch-ai-code-usage-v055.py
+          python3 tools/patch-ai-code-usage-v055b.py
           cd /tmp/src/src/desktop
           node --check main.js
-          grep -n "CLAUDE_CONFIG_DIR\|disableAllHooks\|ANTHROPIC_API_KEY\|claude-statusline-wrapper" main.js
+          grep -n "CLAUDE_CONFIG_DIR\|disableAllHooks\|ANTHROPIC_API_KEY\|claude-capture-v055" main.js
       - name: Prepare official Codex and Claude helper
         working-directory: /tmp/src/src/desktop
         run: |
@@ -35,22 +36,33 @@ jobs:
           tar -xzf /tmp/codex.tar.gz -C /tmp
           cp /tmp/codex-aarch64-apple-darwin vendor/codex
           chmod 755 vendor/codex
-          swiftc claude_capture.swift -o vendor/claude-capture
-          chmod 755 vendor/claude-capture
+          swiftc "$GITHUB_WORKSPACE/tools/claude-capture-v055.swift" -o vendor/claude-capture-v055
+          chmod 755 vendor/claude-capture-v055
           vendor/codex --version
-      - name: Verify Claude helper fixture
+          file vendor/claude-capture-v055
+      - name: Verify Claude helper fixture and no-limit path
         working-directory: /tmp/src/src/desktop
         run: |
           rm -rf "$HOME/.ai-code-usage"
           mkdir -p "$HOME/.ai-code-usage"
-          printf '%s' '{"version":"2.1.90","rate_limits":{"five_hour":{"used_percentage":23.5,"resets_at":1738425600},"seven_day":{"used_percentage":41.2,"resets_at":1738857600}}}' | vendor/claude-capture | grep 'CL 5h 24% · 7d 41%'
+          printf '%s' '{"version":"2.1.90","rate_limits":{"five_hour":{"used_percentage":23.5,"resets_at":1738425600},"seven_day":{"used_percentage":41.2,"resets_at":1738857600}}}' | vendor/claude-capture-v055 | grep 'CL 5h 24% · 7d 41%'
           python3 - <<'PY'
           import json, pathlib
-          p=pathlib.Path.home()/'.ai-code-usage/claude-usage.json'
-          j=json.loads(p.read_text())
+          base=pathlib.Path.home()/'.ai-code-usage'
+          j=json.loads((base/'claude-usage.json').read_text())
           assert j['fiveHour']['usedPercent']==23.5
           assert j['sevenDay']['usedPercent']==41.2
-          print('Claude helper fixture PASS')
+          assert 'has_rate_limits=true' in (base/'claude-statusline.log').read_text()
+          print('Claude helper rate-limit fixture PASS')
+          PY
+          printf '%s' '{"version":"2.1.90","model":{"display_name":"Opus"}}' | vendor/claude-capture-v055 | grep 'CL --'
+          python3 - <<'PY'
+          import json, pathlib
+          base=pathlib.Path.home()/'.ai-code-usage'
+          j=json.loads((base/'claude-usage.json').read_text())
+          assert j['fiveHour'] is None and j['sevenDay'] is None
+          assert 'has_rate_limits=false' in (base/'claude-statusline.log').read_text()
+          print('Claude helper missing-rate-limit fixture PASS')
           PY
       - name: Install test and build
         working-directory: /tmp/src/src/desktop
@@ -66,7 +78,7 @@ jobs:
           codesign --verify --deep --strict "$APP"
           file "$APP/Contents/MacOS/AI Code Usage"
           file "$APP/Contents/Resources/vendor/codex"
-          file "$APP/Contents/Resources/vendor/claude-capture"
+          file "$APP/Contents/Resources/vendor/claude-capture-v055"
           test -f dist/AI-Code-Usage-Mac-M4-v0.5.5.dmg
           test -f dist/AI-Code-Usage-Mac-M4-v0.5.5.zip
           shasum -a 256 dist/AI-Code-Usage-Mac-M4-v0.5.5.dmg dist/AI-Code-Usage-Mac-M4-v0.5.5.zip
