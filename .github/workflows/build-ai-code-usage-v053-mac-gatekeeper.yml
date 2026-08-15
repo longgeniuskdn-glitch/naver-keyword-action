@@ -1,0 +1,97 @@
+name: Build AI Code Usage v0.5.3 Mac Gatekeeper Launcher
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/build-ai-code-usage-v053-mac-gatekeeper.yml"
+      - "ai-code-usage-v050.chunk*"
+permissions:
+  contents: read
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ai-code-usage-v050.chunk* | tr -d '[:space:]' | base64 --decode > /tmp/source.zip
+          ACTUAL=$(shasum -a 256 /tmp/source.zip | awk '{print $1}')
+          test "$ACTUAL" = "1a801110f75301d2e934aa31f57d7c0b8907df0632732ca87d56c5ed6a9fe36c"
+          unzip -q /tmp/source.zip -d /tmp/src
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Fix runtime syntax and version
+        working-directory: /tmp/src/src/desktop
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('main.js')
+          s=p.read_text()
+          needle="  setTimeout(refreshAll,800);setInterval(()=>{refreshClaude();if(modeShows('codex'))codex.refresh();else updateUi()},60000);\napp.on('before-quit'"
+          repl="  setTimeout(refreshAll,800);setInterval(()=>{refreshClaude();if(modeShows('codex'))codex.refresh();else updateUi()},60000);\n});\napp.on('before-quit'"
+          if needle in s:
+              s=s.replace(needle,repl,1)
+          s=s.replace("const VERSION='0.5.0';", "const VERSION='0.5.3';")
+          p.write_text(s)
+          f=Path('package.json')
+          f.write_text(f.read_text().replace('0.5.0','0.5.3'))
+          PY
+          node --check main.js
+      - name: Prepare Codex and Claude helper
+        working-directory: /tmp/src/src/desktop
+        run: |
+          mkdir -p vendor
+          curl -L --fail --retry 3 https://github.com/openai/codex/releases/latest/download/codex-aarch64-apple-darwin.tar.gz -o /tmp/codex.tar.gz
+          tar -xzf /tmp/codex.tar.gz -C /tmp
+          cp /tmp/codex-aarch64-apple-darwin vendor/codex
+          chmod 755 vendor/codex
+          swiftc claude_capture.swift -o vendor/claude-capture
+          chmod 755 vendor/claude-capture
+          printf '%s' '{"version":"2.1.90","rate_limits":{"five_hour":{"used_percentage":23.5,"resets_at":1738425600},"seven_day":{"used_percentage":41.2,"resets_at":1738857600}}}' | vendor/claude-capture | grep 'CL 5h 24% · 7d 41%'
+      - name: Build Mac app
+        working-directory: /tmp/src/src/desktop
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: "false" }
+        run: |
+          npm install
+          npm test
+          npm run dist:mac
+      - name: Ad-hoc sign and verify app
+        run: |
+          mkdir -p /tmp/v053
+          APPZIP=$(find /tmp/src/src/desktop/dist -maxdepth 1 -name '*.zip' | head -1)
+          test -n "$APPZIP"
+          unzip -q "$APPZIP" -d /tmp/v053
+          APP='/tmp/v053/AI Code Usage.app'
+          test -d "$APP"
+          /usr/bin/codesign --force --deep --sign - --timestamp=none "$APP"
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP"
+          /usr/bin/codesign -dv --verbose=4 "$APP" 2>&1 | tee /tmp/codesign.txt
+          grep -q 'Signature=adhoc' /tmp/codesign.txt
+          test -d "$APP/Contents/_CodeSignature"
+          /usr/bin/plutil -replace CFBundleShortVersionString -string '0.5.3' "$APP/Contents/Info.plist"
+          /usr/bin/plutil -replace CFBundleVersion -string '0.5.3' "$APP/Contents/Info.plist"
+          # plist modification invalidates the bundle signature, so sign and verify once more.
+          /usr/bin/codesign --force --deep --sign - --timestamp=none "$APP"
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP"
+          mv "$APP" '/tmp/v053/AI Code Usage 런처.app'
+          cat > '/tmp/v053/먼저 읽기.txt' <<'TXT'
+          AI Code Usage v0.5.3
+
+          1. "AI Code Usage 런처.app"을 더블클릭하세요.
+          2. 처음에는 macOS가 개발자를 확인할 수 없다고 차단하는 것이 정상입니다.
+          3. 시스템 설정 > 개인정보 보호 및 보안으로 이동하세요.
+          4. 아래쪽의 "그래도 열기"를 누르세요.
+          5. 확인창에서 다시 "열기"를 누르면 이후에는 일반 앱처럼 실행됩니다.
+
+          중요: 이 버전은 macOS의 정상 Gatekeeper 승인 흐름을 쓰기 위해 quarantine 속성을 자동 삭제하지 않습니다.
+          TXT
+          cd /tmp/v053
+          ditto -c -k --sequesterRsrc --keepParent 'AI Code Usage 런처.app' "$GITHUB_WORKSPACE/AI-Code-Usage-Launcher-Mac-M4-v0.5.3.zip"
+          unzip -tq "$GITHUB_WORKSPACE/AI-Code-Usage-Launcher-Mac-M4-v0.5.3.zip"
+          cp '먼저 읽기.txt' "$GITHUB_WORKSPACE/AI-Code-Usage-v0.5.3-먼저읽기.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Code-Usage-Launcher-Mac-M4-v0.5.3
+          path: |
+            AI-Code-Usage-Launcher-Mac-M4-v0.5.3.zip
+            AI-Code-Usage-v0.5.3-먼저읽기.txt
