@@ -1,0 +1,99 @@
+name: TimSEOGuru Parallel Long-form SEO Analysis
+
+on:
+  push:
+    branches:
+      - chatgpt-timseo-longform-analysis-20260816
+    paths:
+      - scripts/timseo_collect.py
+      - scripts/timseo_merge.py
+      - .github/workflows/timseo-parallel-analysis.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CHANNEL_URL: https://www.youtube.com/@TimSEOGuru/videos
+  BATCH_TOTAL: '16'
+  EXPECTED_COUNT: '351'
+
+jobs:
+  analyze:
+    name: Analyze batch ${{ matrix.batch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix:
+        batch: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+    steps:
+      - name: Checkout temporary analysis branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install collector dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet yt-dlp youtube-transcript-api requests pillow pytesseract
+
+      - name: Analyze assigned long-form videos
+        env:
+          BATCH_INDEX: ${{ matrix.batch }}
+          OUTPUT_DIR: out/batch_${{ matrix.batch }}
+        run: python scripts/timseo_collect.py
+
+      - name: Upload batch result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: timseo-batch-${{ matrix.batch }}
+          path: out/batch_${{ matrix.batch }}/
+          if-no-files-found: warn
+          retention-days: 7
+
+  merge:
+    name: Merge all 351 long-form analyses
+    needs: analyze
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout merger
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download all completed batches
+        uses: actions/download-artifact@v4
+        with:
+          pattern: timseo-batch-*
+          path: downloaded_batches
+          merge-multiple: false
+
+      - name: Merge analysis rows, transcripts, metadata and thumbnails
+        env:
+          BATCH_ROOT: downloaded_batches
+          FINAL_DIR: final
+        run: python scripts/timseo_merge.py
+
+      - name: Upload complete analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TimSEOGuru-longform-SEO-full-analysis
+          path: final/
+          if-no-files-found: warn
+          retention-days: 7
