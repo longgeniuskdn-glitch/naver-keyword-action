@@ -1,0 +1,1 @@
+v0.5.3: preserve quarantine, ad-hoc sign app bundle, use normal Gatekeeper Open Anyway flow.
