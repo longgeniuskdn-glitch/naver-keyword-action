@@ -1,0 +1,1 @@
+Build trigger for macOS Gatekeeper launcher v0.5.3.
