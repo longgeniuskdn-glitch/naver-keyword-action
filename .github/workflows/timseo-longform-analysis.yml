@@ -1,0 +1,50 @@
+name: TimSEOGuru Long-form SEO Analysis
+
+on:
+  push:
+    branches:
+      - chatgpt-timseo-longform-analysis-20260816
+    paths:
+      - scripts/timseo_collect.py
+      - .github/workflows/timseo-longform-analysis.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect-and-analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout temporary branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install OCR and Python dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr
+          python -m pip install --upgrade pip
+          python -m pip install yt-dlp youtube-transcript-api pandas openpyxl requests pillow pytesseract
+
+      - name: Collect every video from the Videos tab and analyze SEO
+        env:
+          CHANNEL_URL: https://www.youtube.com/@TimSEOGuru/videos
+          OUTPUT_DIR: out
+        run: python scripts/timseo_collect.py
+
+      - name: Upload complete analysis artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TimSEOGuru-longform-SEO-analysis
+          path: out/
+          if-no-files-found: warn
+          retention-days: 7
