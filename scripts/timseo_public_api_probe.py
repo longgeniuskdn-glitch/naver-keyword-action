@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, sys
+import json, re, sys
 import requests
 
 VIDEO_ID = 'v8KQk3YVG7w'
@@ -43,8 +43,42 @@ if key_resp is not None:
 record('google_timedtext_manual',f'https://www.youtube.com/api/timedtext?v={VIDEO_ID}&lang=en&fmt=vtt')
 record('google_timedtext_asr',f'https://www.youtube.com/api/timedtext?v={VIDEO_ID}&lang=en&kind=asr&fmt=vtt')
 
+# Direct watch-page metadata extraction. Playback can be blocked while public metadata remains embedded.
+try:
+    wr=S.get(VIDEO_URL+'&hl=en',timeout=80)
+    page=wr.text
+    player=None
+    for marker in ['var ytInitialPlayerResponse = ', 'ytInitialPlayerResponse = ', 'window["ytInitialPlayerResponse"] = ']:
+        pos=page.find(marker)
+        if pos>=0:
+            start=page.find('{',pos+len(marker))
+            try:
+                player=json.JSONDecoder().raw_decode(page[start:])[0]
+                break
+            except Exception: pass
+    if player is None:
+        m=re.search(r'"playerResponse":"((?:\\.|[^"\\])*)"',page)
+        if m:
+            try:player=json.loads(json.loads('"'+m.group(1)+'"'))
+            except Exception:pass
+    vd=(player or {}).get('videoDetails') or {}
+    micro=((player or {}).get('microformat') or {}).get('playerMicroformatRenderer') or {}
+    meta={
+      'status':wr.status_code,'bytes':len(wr.content),'player_found':bool(player),
+      'playability':((player or {}).get('playabilityStatus') or {}).get('status'),
+      'title':vd.get('title'),'description_len':len(vd.get('shortDescription') or ''),
+      'description_preview':(vd.get('shortDescription') or '')[:500],
+      'keywords_count':len(vd.get('keywords') or []),'keywords':(vd.get('keywords') or [])[:20],
+      'lengthSeconds':vd.get('lengthSeconds'),'viewCount':vd.get('viewCount'),
+      'publishDate':micro.get('publishDate'),'uploadDate':micro.get('uploadDate'),
+      'category':micro.get('category'),'ownerChannelName':micro.get('ownerChannelName'),
+    }
+    results.append({'name':'youtube_watch_html','metadata':meta}); print('WATCH_META',json.dumps(meta,ensure_ascii=False))
+except Exception as e:
+    results.append({'name':'youtube_watch_html','error':f'{type(e).__name__}: {e}'}); print('WATCH_META_ERR',repr(e))
+
 with open('public_api_probe.json','w',encoding='utf-8') as f:json.dump(results,f,ensure_ascii=False,indent=2)
 
-ok = [x for x in results if x.get('status') == 200 and x.get('bytes',0) > 100]
+ok = [x for x in results if (x.get('status') == 200 and x.get('bytes',0) > 100) or (x.get('name')=='youtube_watch_html' and x.get('metadata',{}).get('player_found'))]
 print('USABLE_COUNT',len(ok),[x['name'] for x in ok])
 if not ok:sys.exit(2)
