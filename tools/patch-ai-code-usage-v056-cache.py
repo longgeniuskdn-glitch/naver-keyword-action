@@ -127,6 +127,7 @@ pkg['build']['mac']['artifactName'] = 'AI-Code-Usage-Mac-M4-v${version}.${ext}'
 pkgp.write_text(json.dumps(pkg, ensure_ascii=False, indent=2) + '\n')
 
 test = root / 'test' / 'claude-cache.test.js'
+test.parent.mkdir(parents=True, exist_ok=True)
 test.write_text(r'''const test=require('node:test');
 const assert=require('node:assert/strict');
 const {parseClaudeCache}=require('../usage-core');
