@@ -1,7 +1,7 @@
-name: Build AI Code Usage v0.5.7 Claude PTY
+name: Temporary AI Code Usage v0.5.7 Mac Build
 
 on:
-  pull_request:
+  push:
     branches: [main]
     paths:
       - 'ai-code-usage-v050.chunk*'
