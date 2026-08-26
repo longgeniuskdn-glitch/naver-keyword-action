@@ -171,3 +171,4 @@ test('returns null for unrelated terminal output',()=>{assert.equal(parseClaudeU
 ''')
 print('v0.5.7 Claude PTY /usage patch applied')
 # build-trigger: validate through base workflow
+# build-trigger-2: base filter enabled
