@@ -34,6 +34,16 @@ jobs:
         run: |
           python3 tools/patch-ai-code-usage-v055b.py
           python3 tools/patch-ai-code-usage-v056-cache.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tools/patch-ai-code-usage-v057-pty.py')
+          s=p.read_text()
+          old='s,n=re.subn(pattern,new_refresh+"\\nasync function refreshAll()",s,count=1,flags=re.S)'
+          new='s,n=re.subn(pattern,lambda _m:new_refresh+"\\nasync function refreshAll()",s,count=1,flags=re.S)'
+          if old not in s:
+              raise SystemExit('v0.5.7 replacement line not found')
+          p.write_text(s.replace(old,new,1))
+          PY
           python3 tools/patch-ai-code-usage-v057-pty.py
           cd /tmp/src/src/desktop
           node --check main.js
