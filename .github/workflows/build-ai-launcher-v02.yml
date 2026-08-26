@@ -103,3 +103,5 @@ jobs:
             /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg
             /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
           if-no-files-found: error
+
+# synchronize trigger for clean v0.5.7 build
