@@ -85,3 +85,4 @@ jobs:
           path: |
             /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg
             /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
+# v0.5.7 PTY build trigger
