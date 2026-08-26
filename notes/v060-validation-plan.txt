@@ -1,0 +1,1 @@
+Validation: credential JSON parser, named five_hour/seven_day response, limits-array fallback, syntax check, full npm test, arm64 package, codesign, DMG/ZIP integrity. Real-account OAuth fetch awaits user Mac.
