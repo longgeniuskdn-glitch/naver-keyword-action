@@ -1,4 +1,4 @@
-name: Build AI Code Usage v0.5.6 Claude Local Cache
+name: Build AI Code Usage v0.5.7 Claude PTY
 on:
   pull_request:
     branches: [ main ]
@@ -6,6 +6,7 @@ on:
       - "ai-code-usage-v050.chunk*"
       - "tools/patch-ai-code-usage-v055b.py"
       - "tools/patch-ai-code-usage-v056-cache.py"
+      - "tools/patch-ai-code-usage-v057-pty.py"
       - "tools/claude-capture-v055.swift"
       - ".github/workflows/build-ai-code-usage-v056-claude-cache.yml"
 permissions:
@@ -23,15 +24,31 @@ jobs:
           unzip -q /tmp/source.zip -d /tmp/src
       - uses: actions/setup-node@v4
         with: { node-version: "22" }
-      - name: Apply v0.5.5 diagnostics and v0.5.6 cache fallback
+      - name: Apply Claude PTY implementation
         run: |
           python3 tools/patch-ai-code-usage-v055b.py
           python3 tools/patch-ai-code-usage-v056-cache.py
+          python3 tools/patch-ai-code-usage-v057-pty.py
           cd /tmp/src/src/desktop
           node --check main.js
           node --check usage-core.js
-          grep -n "cachedUsageUtilization\|claude-local-cache" main.js usage-core.js
-      - name: Prepare official Codex and Claude helper
+          grep -n "captureClaudeUsageTui\|parseClaudeUsageText\|claude-interactive-usage" main.js usage-core.js
+      - name: Verify macOS pseudo terminal transport
+        run: |
+          cat > /tmp/fake-claude-usage <<'SH'
+          #!/bin/sh
+          while IFS= read -r line; do
+            case "$line" in
+              /usage*) printf 'Current session\n████ 42%% used\nCurrent week (all models)\n██ 17%% used\n' ;;
+              /exit*) exit 0 ;;
+            esac
+          done
+          SH
+          chmod +x /tmp/fake-claude-usage
+          printf '/usage\n/exit\n' | /usr/bin/script -q /dev/null /tmp/fake-claude-usage > /tmp/pty-output.txt
+          grep '42% used' /tmp/pty-output.txt
+          grep '17% used' /tmp/pty-output.txt
+      - name: Prepare official Codex and Claude fallback helper
         working-directory: /tmp/src/src/desktop
         run: |
           mkdir -p vendor
@@ -42,14 +59,12 @@ jobs:
           swiftc "$GITHUB_WORKSPACE/tools/claude-capture-v055.swift" -o vendor/claude-capture-v055
           chmod 755 vendor/claude-capture-v055
           vendor/codex --version
-      - name: Test Claude cache parser and statusLine fallback
+      - name: Test Claude parser and app
         working-directory: /tmp/src/src/desktop
         run: |
           npm install
+          node --test test/claude-usage-tui.test.js test/claude-cache.test.js
           npm test
-          rm -rf "$HOME/.ai-code-usage"
-          mkdir -p "$HOME/.ai-code-usage"
-          printf '%s' '{"version":"2.1.90","rate_limits":{"five_hour":{"used_percentage":23.5,"resets_at":1738425600},"seven_day":{"used_percentage":41.2,"resets_at":1738857600}}}' | vendor/claude-capture-v055 | grep 'CL 5h 24% · 7d 41%'
       - name: Build Mac old-style DMG
         working-directory: /tmp/src/src/desktop
         env: { CSC_IDENTITY_AUTO_DISCOVERY: "false" }
@@ -61,13 +76,13 @@ jobs:
           codesign --verify --deep --strict "$APP"
           file "$APP/Contents/MacOS/AI Code Usage"
           file "$APP/Contents/Resources/vendor/codex"
-          file "$APP/Contents/Resources/vendor/claude-capture-v055"
-          test -f dist/AI-Code-Usage-Mac-M4-v0.5.6.dmg
-          test -f dist/AI-Code-Usage-Mac-M4-v0.5.6.zip
-          shasum -a 256 dist/AI-Code-Usage-Mac-M4-v0.5.6.dmg dist/AI-Code-Usage-Mac-M4-v0.5.6.zip
+          test -f dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg
+          test -f dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
+          shasum -a 256 dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: AI-Code-Usage-Mac-M4-v0.5.6-Claude-Cache
+          name: AI-Code-Usage-Mac-M4-v0.5.7-Claude-PTY
           path: |
-            /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.6.dmg
-            /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.6.zip
+            /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg
+            /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
+          if-no-files-found: error
