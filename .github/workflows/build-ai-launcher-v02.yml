@@ -30,27 +30,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Apply Claude PTY implementation
+      - name: Apply Claude expect implementation
         run: |
           python3 tools/patch-ai-code-usage-v055b.py
           python3 tools/patch-ai-code-usage-v056-cache.py
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('tools/patch-ai-code-usage-v057-pty.py')
-          s=p.read_text()
-          old='s,n=re.subn(pattern,new_refresh+"\\nasync function refreshAll()",s,count=1,flags=re.S)'
-          new='s,n=re.subn(pattern,lambda _m:new_refresh+"\\nasync function refreshAll()",s,count=1,flags=re.S)'
-          if old not in s:
-              raise SystemExit('v0.5.7 replacement line not found')
-          p.write_text(s.replace(old,new,1))
-          PY
           python3 tools/patch-ai-code-usage-v057-pty.py
           cd /tmp/src/src/desktop
           node --check main.js
           node --check usage-core.js
-          grep -n "captureClaudeUsageTui\|parseClaudeUsageText\|claude-interactive-usage" main.js usage-core.js
-      - name: Verify macOS pseudo terminal transport
+          grep -n "captureClaudeUsageTui\|parseClaudeUsageText\|/usr/bin/expect" main.js usage-core.js
+      - name: Verify macOS expect pseudo terminal transport
         run: |
+          test -x /usr/bin/expect
           cat > /tmp/fake-claude-usage <<'SH'
           #!/bin/sh
           while IFS= read -r line; do
@@ -61,9 +52,19 @@ jobs:
           done
           SH
           chmod +x /tmp/fake-claude-usage
-          printf '/usage\n/exit\n' | /usr/bin/script -q /dev/null /tmp/fake-claude-usage > /tmp/pty-output.txt
-          grep '42% used' /tmp/pty-output.txt
-          grep '17% used' /tmp/pty-output.txt
+          AICODE_CLAUDE=/tmp/fake-claude-usage /usr/bin/expect -c '
+            set timeout 5
+            log_user 1
+            spawn -noecho $env(AICODE_CLAUDE)
+            after 200
+            send -- "/usage\r"
+            after 300
+            send -- "/exit\r"
+            expect eof
+          ' > /tmp/expect-output.txt 2>&1
+          cat /tmp/expect-output.txt
+          grep '42% used' /tmp/expect-output.txt
+          grep '17% used' /tmp/expect-output.txt
       - name: Prepare official Codex and Claude fallback helper
         working-directory: /tmp/src/src/desktop
         run: |
@@ -98,7 +99,7 @@ jobs:
           shasum -a 256 dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: AI-Code-Usage-Mac-M4-v0.5.7-Claude-PTY
+          name: AI-Code-Usage-Mac-M4-v0.5.7-Claude-Expect
           path: |
             /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg
             /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
