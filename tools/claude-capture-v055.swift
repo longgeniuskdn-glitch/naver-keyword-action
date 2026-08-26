@@ -63,3 +63,5 @@ if let v = fiveUsed { parts.append("5h \(Int(v.rounded()))%") }
 if let v = sevenUsed { parts.append("7d \(Int(v.rounded()))%") }
 if parts.isEmpty { print("CL --") }
 else { print("CL " + parts.joined(separator: " · ")) }
+
+// v0.5.7 build trigger only; PTY is primary and this helper remains fallback.
