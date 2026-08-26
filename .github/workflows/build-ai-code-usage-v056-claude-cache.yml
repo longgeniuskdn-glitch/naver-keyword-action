@@ -1,7 +1,7 @@
 name: Build AI Code Usage v0.5.7 Claude PTY
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, ai-code-usage-v056-claude-cache ]
     paths:
       - "ai-code-usage-v050.chunk*"
       - "tools/patch-ai-code-usage-v055b.py"
