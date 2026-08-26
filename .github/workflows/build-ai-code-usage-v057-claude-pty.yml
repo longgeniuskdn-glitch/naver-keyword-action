@@ -1,0 +1,87 @@
+name: Build AI Code Usage v0.5.7 Claude PTY
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "ai-code-usage-v050.chunk*"
+      - "tools/patch-ai-code-usage-v055b.py"
+      - "tools/patch-ai-code-usage-v056-cache.py"
+      - "tools/patch-ai-code-usage-v057-pty.py"
+      - "tools/claude-capture-v055.swift"
+      - ".github/workflows/build-ai-code-usage-v057-claude-pty.yml"
+permissions:
+  contents: read
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ai-code-usage-v050.chunk* | tr -d '[:space:]' | base64 --decode > /tmp/source.zip
+          ACTUAL=$(shasum -a 256 /tmp/source.zip | awk '{print $1}')
+          test "$ACTUAL" = "1a801110f75301d2e934aa31f57d7c0b8907df0632732ca87d56c5ed6a9fe36c"
+          unzip -q /tmp/source.zip -d /tmp/src
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Apply Claude PTY implementation
+        run: |
+          python3 tools/patch-ai-code-usage-v055b.py
+          python3 tools/patch-ai-code-usage-v056-cache.py
+          python3 tools/patch-ai-code-usage-v057-pty.py
+          cd /tmp/src/src/desktop
+          node --check main.js
+          node --check usage-core.js
+          grep -n "captureClaudeUsageTui\|parseClaudeUsageText\|claude-interactive-usage" main.js usage-core.js
+      - name: Verify macOS pseudo terminal transport
+        run: |
+          cat > /tmp/fake-claude-usage <<'SH'
+          #!/bin/sh
+          while IFS= read -r line; do
+            case "$line" in
+              /usage*) printf 'Current session\n████ 42%% used\nCurrent week (all models)\n██ 17%% used\n' ;;
+              /exit*) exit 0 ;;
+            esac
+          done
+          SH
+          chmod +x /tmp/fake-claude-usage
+          printf '/usage\n/exit\n' | /usr/bin/script -q /dev/null /tmp/fake-claude-usage > /tmp/pty-output.txt
+          grep '42% used' /tmp/pty-output.txt
+          grep '17% used' /tmp/pty-output.txt
+      - name: Prepare official Codex and Claude fallback helper
+        working-directory: /tmp/src/src/desktop
+        run: |
+          mkdir -p vendor
+          curl -L --fail --retry 3 https://github.com/openai/codex/releases/latest/download/codex-aarch64-apple-darwin.tar.gz -o /tmp/codex.tar.gz
+          tar -xzf /tmp/codex.tar.gz -C /tmp
+          cp /tmp/codex-aarch64-apple-darwin vendor/codex
+          chmod 755 vendor/codex
+          swiftc "$GITHUB_WORKSPACE/tools/claude-capture-v055.swift" -o vendor/claude-capture-v055
+          chmod 755 vendor/claude-capture-v055
+          vendor/codex --version
+      - name: Test Claude parsers and app
+        working-directory: /tmp/src/src/desktop
+        run: |
+          npm install
+          node --test test/claude-usage-tui.test.js test/claude-cache.test.js
+          npm test
+      - name: Build Mac old-style DMG
+        working-directory: /tmp/src/src/desktop
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: "false" }
+        run: npm run dist:mac
+      - name: Verify package
+        working-directory: /tmp/src/src/desktop
+        run: |
+          APP=$(find dist -maxdepth 2 -type d -name '*.app' | head -1)
+          codesign --verify --deep --strict "$APP"
+          file "$APP/Contents/MacOS/AI Code Usage"
+          file "$APP/Contents/Resources/vendor/codex"
+          test -f dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg
+          test -f dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
+          shasum -a 256 dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Code-Usage-Mac-M4-v0.5.7-Claude-PTY
+          path: |
+            /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg
+            /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
