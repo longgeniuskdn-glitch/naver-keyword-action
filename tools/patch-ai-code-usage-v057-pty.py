@@ -175,3 +175,4 @@ test('parses compact usage text',()=>{
 test('returns null for unrelated terminal output',()=>{assert.equal(parseClaudeUsageText('Claude Code ready'),null)});
 ''')
 print('v0.5.7 Claude PTY /usage patch applied')
+# trigger after main build slot installed
