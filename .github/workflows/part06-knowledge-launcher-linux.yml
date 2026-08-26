@@ -1,0 +1,160 @@
+name: PART06 Knowledge and Launcher Linux Verify
+
+on:
+  push:
+    branches:
+      - part06-knowledge-launcher-v1
+    paths:
+      - 'part06_knowledge_warehouse/**'
+      - 'ai_company_launcher/**'
+      - '.github/workflows/part06-knowledge-launcher-linux.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'part06_knowledge_warehouse/**'
+      - 'ai_company_launcher/**'
+      - '.github/workflows/part06-knowledge-launcher-linux.yml'
+  workflow_dispatch:
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Report environment
+        run: |
+          cat /etc/os-release
+          python3 --version
+          uname -m
+
+      - name: Clean PART06 generated data
+        working-directory: part06_knowledge_warehouse
+        run: |
+          rm -rf data output backups knowledge __pycache__ .pytest_cache
+          find . -name '*.pyc' -delete
+          mkdir -p data output backups knowledge
+
+      - name: Run PART06 10 automated tests
+        working-directory: part06_knowledge_warehouse
+        run: python3 -m unittest -v test_unittest.py
+
+      - name: Run PART06 preflight
+        working-directory: part06_knowledge_warehouse
+        run: python3 app.py --preflight
+
+      - name: Run PART06 server smoke test
+        working-directory: part06_knowledge_warehouse
+        run: |
+          KNOWLEDGE_QUIET=1 AUTO_OPEN_BROWSER=0 python3 app.py --no-browser > /tmp/part06.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID 2>/dev/null || true' EXIT
+          sleep 2
+          curl --fail --silent http://127.0.0.1:8796/health | grep '"ok": true'
+          curl --fail --silent http://127.0.0.1:8796/module-info | grep 'part06_knowledge'
+          curl --fail --silent http://127.0.0.1:8796/ | grep '회사 자료를 기억하는 AI 지식 창고'
+          kill $APP_PID
+          wait $APP_PID || true
+
+      - name: Verify sample, search, export, backup and restore
+        working-directory: part06_knowledge_warehouse
+        run: |
+          rm -rf data output backups knowledge
+          python3 app.py --demo
+          python3 - <<'PY'
+          import app
+          rows = app.list_documents()
+          assert len(rows) == 3, len(rows)
+          found = app.search_documents('환불 7일')
+          assert found and '환불정책.md' in found[0]['source']
+          path = app.export_evidence('환불 7일')
+          assert path.exists()
+          print('documents=3 search=ok export=ok')
+          PY
+          BACKUP_PATH=$(python3 app.py --backup | tail -n 1)
+          test -f "$BACKUP_PATH"
+          rm -f data/knowledge.db data/knowledge.db-wal data/knowledge.db-shm
+          python3 app.py --restore "$BACKUP_PATH"
+          python3 - <<'PY'
+          import app
+          assert len(app.list_documents()) == 3
+          assert app.search_documents('환불')
+          print('restore=ok')
+          PY
+
+      - name: Clean launcher generated data
+        working-directory: ai_company_launcher
+        run: |
+          rm -rf logs modules __pycache__ .pytest_cache
+          find . -name '*.pyc' -delete
+          mkdir -p logs modules
+
+      - name: Run launcher 5 automated tests
+        working-directory: ai_company_launcher
+        run: python3 -m unittest -v test_launcher.py
+
+      - name: Verify launcher with PART06 module
+        run: |
+          rm -rf ai_company_launcher/modules/part06_knowledge
+          mkdir -p ai_company_launcher/modules/part06_knowledge
+          rsync -a --exclude 'data/' --exclude 'output/' --exclude 'backups/' --exclude 'knowledge/' --exclude '__pycache__/' --exclude '*.pyc' part06_knowledge_warehouse/ ai_company_launcher/modules/part06_knowledge/
+          mkdir -p ai_company_launcher/modules/part06_knowledge/data ai_company_launcher/modules/part06_knowledge/output ai_company_launcher/modules/part06_knowledge/backups ai_company_launcher/modules/part06_knowledge/knowledge
+          cd ai_company_launcher
+          LAUNCHER_QUIET=1 AUTO_OPEN_BROWSER=0 python3 launcher.py --no-browser > /tmp/launcher.log 2>&1 &
+          LAUNCHER_PID=$!
+          trap 'kill $LAUNCHER_PID 2>/dev/null || true; pkill -f "modules/part06_knowledge/app.py" 2>/dev/null || true' EXIT
+          sleep 2
+          curl --fail --silent http://127.0.0.1:8780/health | grep '"ok": true'
+          curl --fail --silent http://127.0.0.1:8780/ | grep '회사 자료를 기억하는 AI 지식 창고'
+          curl --fail --silent -X POST -o /dev/null http://127.0.0.1:8780/start/part06_knowledge
+          sleep 3
+          curl --fail --silent http://127.0.0.1:8796/health | grep 'part06_knowledge'
+          curl --fail --silent http://127.0.0.1:8780/api/modules | grep 'healthy'
+          curl --fail --silent -X POST -o /dev/null http://127.0.0.1:8780/stop/part06_knowledge
+          kill $LAUNCHER_PID
+          wait $LAUNCHER_PID || true
+
+      - name: Build clean individual and launcher packages
+        run: |
+          rm -rf package
+          mkdir -p package/PART06_회사자료_AI지식창고_v1
+          rsync -a --exclude 'data/' --exclude 'output/' --exclude 'backups/' --exclude 'knowledge/' --exclude '__pycache__/' --exclude '*.pyc' part06_knowledge_warehouse/ package/PART06_회사자료_AI지식창고_v1/
+          mkdir -p package/PART06_회사자료_AI지식창고_v1/data package/PART06_회사자료_AI지식창고_v1/output package/PART06_회사자료_AI지식창고_v1/backups package/PART06_회사자료_AI지식창고_v1/knowledge
+          chmod +x package/PART06_회사자료_AI지식창고_v1/START_MAC.command
+
+          mkdir -p package/우리회사_AI운영실_런처_MVP_v0.1/modules/part06_knowledge
+          rsync -a --exclude 'logs/' --exclude 'modules/' --exclude '__pycache__/' --exclude '*.pyc' ai_company_launcher/ package/우리회사_AI운영실_런처_MVP_v0.1/
+          rsync -a --exclude 'data/' --exclude 'output/' --exclude 'backups/' --exclude 'knowledge/' --exclude '__pycache__/' --exclude '*.pyc' part06_knowledge_warehouse/ package/우리회사_AI운영실_런처_MVP_v0.1/modules/part06_knowledge/
+          mkdir -p package/우리회사_AI운영실_런처_MVP_v0.1/logs
+          mkdir -p package/우리회사_AI운영실_런처_MVP_v0.1/modules/part06_knowledge/data package/우리회사_AI운영실_런처_MVP_v0.1/modules/part06_knowledge/output package/우리회사_AI운영실_런처_MVP_v0.1/modules/part06_knowledge/backups package/우리회사_AI운영실_런처_MVP_v0.1/modules/part06_knowledge/knowledge
+          chmod +x package/우리회사_AI운영실_런처_MVP_v0.1/START_MAC.command
+          chmod +x package/우리회사_AI운영실_런처_MVP_v0.1/modules/part06_knowledge/START_MAC.command
+
+          test -f package/PART06_회사자료_AI지식창고_v1/module.json
+          test -f package/우리회사_AI운영실_런처_MVP_v0.1/modules/part06_knowledge/module.json
+          ! find package -name '*.pyc' -o -name '__pycache__' | grep .
+          ! find package -name '*.db' | grep .
+
+      - name: Upload PART06 verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: PART06-knowledge-warehouse-linux-verified
+          path: package/PART06_회사자료_AI지식창고_v1
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload launcher verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-company-launcher-mvp-linux-verified
+          path: package/우리회사_AI운영실_런처_MVP_v0.1
+          if-no-files-found: error
+          retention-days: 30
