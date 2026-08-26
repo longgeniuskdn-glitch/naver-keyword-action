@@ -1,0 +1,126 @@
+name: PART05 Linux Verify
+
+on:
+  push:
+    branches:
+      - part05-intake-classifier-v1
+    paths:
+      - 'part05_intake_classifier/**'
+      - '.github/workflows/part05-linux-verify.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'part05_intake_classifier/**'
+      - '.github/workflows/part05-linux-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Start from a clean project folder
+        working-directory: part05_intake_classifier
+        run: |
+          rm -rf data output backups __pycache__ .pytest_cache
+          find . -name '*.pyc' -delete
+
+      - name: Run 8 automated tests
+        id: tests
+        continue-on-error: true
+        working-directory: part05_intake_classifier
+        run: |
+          set +e
+          python3 -m unittest -v test_unittest.py > /tmp/part05_tests.log 2>&1
+          TEST_CODE=$?
+          cat /tmp/part05_tests.log
+          exit $TEST_CODE
+
+      - name: Report test failure on PR
+        if: steps.tests.outcome == 'failure' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '## PART 05 Linux test failure'
+            echo
+            echo '```text'
+            cat /tmp/part05_tests.log
+            echo '```'
+          } > /tmp/part05_comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/part05_comment.md
+
+      - name: Stop after failed tests
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
+
+      - name: Run preflight
+        working-directory: part05_intake_classifier
+        run: python3 app.py --preflight
+
+      - name: Run local server smoke test
+        working-directory: part05_intake_classifier
+        run: |
+          INTAKE_QUIET=1 AUTO_OPEN_BROWSER=0 python3 app.py --no-browser > /tmp/part05_server.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID 2>/dev/null || true' EXIT
+          sleep 2
+          curl --fail --silent http://127.0.0.1:8795/health | grep '"ok": true'
+          curl --fail --silent http://127.0.0.1:8795/ | grep '업무 접수·분류실'
+          kill $APP_PID
+          wait $APP_PID || true
+
+      - name: Verify demo, backup and restore
+        working-directory: part05_intake_classifier
+        run: |
+          rm -rf data backups
+          python3 app.py --demo
+          python3 - <<'PY'
+          import app
+          assert len(app.list_intakes()) == 4
+          print('demo_count=4')
+          PY
+          BACKUP_PATH=$(python3 app.py --backup | tail -n 1)
+          test -f "$BACKUP_PATH"
+          rm -f data/intake.db data/intake.db-wal data/intake.db-shm
+          python3 app.py --restore "$BACKUP_PATH"
+          python3 - <<'PY'
+          import app
+          rows = app.list_intakes()
+          assert len(rows) == 4
+          print('restore_count=4')
+          PY
+
+      - name: Build clean package folder
+        run: |
+          rm -rf package
+          mkdir -p package/PART05_업무_접수_분류실_v1
+          rsync -a --exclude 'data/' --exclude 'backups/' --exclude 'output/' --exclude '__pycache__/' --exclude '*.pyc' part05_intake_classifier/ package/PART05_업무_접수_분류실_v1/
+          mkdir -p package/PART05_업무_접수_분류실_v1/data package/PART05_업무_접수_분류실_v1/backups package/PART05_업무_접수_분류실_v1/output
+          chmod +x package/PART05_업무_접수_분류실_v1/START_MAC.command
+          test ! -e package/PART05_업무_접수_분류실_v1/data/intake.db
+          test -z "$(find package/PART05_업무_접수_분류실_v1 -name '*.pyc' -o -name '__pycache__')"
+
+      - name: Upload verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: PART05-intake-classifier-linux-verified
+          path: package/PART05_업무_접수_분류실_v1
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
