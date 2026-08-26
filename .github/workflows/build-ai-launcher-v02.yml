@@ -1,138 +1,95 @@
-name: Build AI Operations Launcher v0.2
+name: Build AI Code Usage v0.5.7 Claude PTY
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - 'ai_launcher_v02/**'
-      - 'tools/build_ai_launcher_v02.py'
-      - 'tools/build_ai_launcher_v02_entry.py'
+      - 'ai-code-usage-v050.chunk*'
+      - 'tools/patch-ai-code-usage-v055b.py'
+      - 'tools/patch-ai-code-usage-v056-cache.py'
+      - 'tools/patch-ai-code-usage-v057-pty.py'
+      - 'tools/claude-capture-v055.swift'
       - '.github/workflows/build-ai-launcher-v02.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
-  build-and-verify:
-    runs-on: ubuntu-24.04
+  mac:
+    runs-on: macos-14
     timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ai-code-usage-v050.chunk* | tr -d '[:space:]' | base64 --decode > /tmp/source.zip
+          ACTUAL=$(shasum -a 256 /tmp/source.zip | awk '{print $1}')
+          test "$ACTUAL" = "1a801110f75301d2e934aa31f57d7c0b8907df0632732ca87d56c5ed6a9fe36c"
+          unzip -q /tmp/source.zip -d /tmp/src
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.13'
-
-      - name: Install build dependency
-        run: python -m pip install --disable-pip-version-check gdown
-
-      - name: Download sources and build three-module launcher
-        id: build
-        continue-on-error: true
-        shell: bash
+          node-version: '22'
+      - name: Apply Claude PTY implementation
         run: |
-          set -o pipefail
-          python tools/build_ai_launcher_v02_entry.py 2>&1 | tee build.log
-
-      - name: Report build failure
-        if: steps.build.outcome == 'failure'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
+          python3 tools/patch-ai-code-usage-v055b.py
+          python3 tools/patch-ai-code-usage-v056-cache.py
+          python3 tools/patch-ai-code-usage-v057-pty.py
+          cd /tmp/src/src/desktop
+          node --check main.js
+          node --check usage-core.js
+          grep -n "captureClaudeUsageTui\|parseClaudeUsageText\|claude-interactive-usage" main.js usage-core.js
+      - name: Verify macOS pseudo terminal transport
         run: |
-          {
-            echo '### 통합 런처 v0.2 빌드 실패 기록'
-            echo
-            echo '```text'
-            tail -n 100 build.log
-            echo '```'
-          } > build_failure_comment.md
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            gh pr comment "${{ github.event.pull_request.number }}" --body-file build_failure_comment.md
-          fi
-          cat build_failure_comment.md
-          exit 1
-
-      - name: Test launcher core
-        working-directory: ai_launcher_v02
-        run: python -m unittest -v test_launcher.py
-
-      - name: Test adapted modules
-        shell: bash
-        run: |
-          set -euo pipefail
-          BUNDLE='dist/우리회사_AI운영실_런처_v0.2/modules'
-          for module in part04 part05 part06; do
-            echo "===== TEST $module ====="
-            cd "$GITHUB_WORKSPACE/$BUNDLE/$module"
-            if [ -f test_unittest.py ]; then
-              python -m unittest -v test_unittest.py
-            elif [ -d tests ]; then
-              python -m unittest discover -v
-            else
-              echo "No unittest file found; continuing to preflight and smoke test."
-            fi
-            ENTRY=$(python -c "import json,pathlib; print(json.loads(pathlib.Path('module.json').read_text(encoding='utf-8'))['entrypoint'])")
-            if python "$ENTRY" --help 2>&1 | grep -q -- '--preflight'; then
-              python "$ENTRY" --preflight
-            fi
+          cat > /tmp/fake-claude-usage <<'SH'
+          #!/bin/sh
+          while IFS= read -r line; do
+            case "$line" in
+              /usage*) printf 'Current session\n████ 42%% used\nCurrent week (all models)\n██ 17%% used\n' ;;
+              /exit*) exit 0 ;;
+            esac
           done
-
-      - name: Run three-module Linux smoke flow
-        working-directory: dist/우리회사_AI운영실_런처_v0.2
-        run: python smoke_test.py
-
-      - name: Write verification evidence and clean runtime data
-        shell: bash
+          SH
+          chmod +x /tmp/fake-claude-usage
+          printf '/usage\n/exit\n' | /usr/bin/script -q /dev/null /tmp/fake-claude-usage > /tmp/pty-output.txt
+          grep '42% used' /tmp/pty-output.txt
+          grep '17% used' /tmp/pty-output.txt
+      - name: Prepare official Codex and Claude fallback helper
+        working-directory: /tmp/src/src/desktop
         run: |
-          set -euo pipefail
-          BUNDLE='dist/우리회사_AI운영실_런처_v0.2'
-          cat > "$BUNDLE/VERIFICATION.md" <<'EOF'
-          # 통합 런처 v0.2 검증 기록
-
-          - 환경: GitHub Actions Ubuntu 24.04
-          - Python: 3.13
-          - 통합 모듈: PART 04, PART 05, PART 06
-          - 런처 핵심 자동 테스트: 9개
-          - 모듈 자체 테스트: 각 모듈에 포함된 테스트를 재실행
-          - 통합 smoke: 세 모듈 자동 탐색 → 실행 → `/health` → 실제 화면 응답 → 종료
-          - 데이터 정책: 모듈별 SQLite 및 폴더 분리
-          - 검증 범위: Linux 신규 환경
-          - 미검증: 실제 사용자 macOS·Windows의 첫 실행과 보안 경고
-          EOF
-          find "$BUNDLE" -type f \( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' -o -name '*.sqlite' -o -name '*.sqlite3' -o -name '*.log' -o -name '*.pyc' \) -delete
-          find "$BUNDLE" -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -prune -exec rm -rf {} + || true
-          rm -rf "$BUNDLE/runtime" "$BUNDLE/logs"
-          mkdir -p "$BUNDLE/runtime" "$BUNDLE/logs"
-          chmod +x "$BUNDLE/START_MAC.command" "$BUNDLE/START_LINUX.sh"
-          chmod +x "$BUNDLE/modules/part04/START_MAC.command" 2>/dev/null || true
-          chmod +x "$BUNDLE/modules/part05/START_MAC.command" 2>/dev/null || true
-          chmod +x "$BUNDLE/modules/part06/START_MAC.command" 2>/dev/null || true
-
-      - name: Upload launcher bundle
-        uses: actions/upload-artifact@v4
+          mkdir -p vendor
+          curl -L --fail --retry 3 https://github.com/openai/codex/releases/latest/download/codex-aarch64-apple-darwin.tar.gz -o /tmp/codex.tar.gz
+          tar -xzf /tmp/codex.tar.gz -C /tmp
+          cp /tmp/codex-aarch64-apple-darwin vendor/codex
+          chmod 755 vendor/codex
+          swiftc "$GITHUB_WORKSPACE/tools/claude-capture-v055.swift" -o vendor/claude-capture-v055
+          chmod 755 vendor/claude-capture-v055
+          vendor/codex --version
+      - name: Test Claude parsers and app
+        working-directory: /tmp/src/src/desktop
+        run: |
+          npm install
+          node --test test/claude-usage-tui.test.js test/claude-cache.test.js
+          npm test
+      - name: Build Mac old-style DMG
+        working-directory: /tmp/src/src/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:mac
+      - name: Verify package
+        working-directory: /tmp/src/src/desktop
+        run: |
+          APP=$(find dist -maxdepth 2 -type d -name '*.app' | head -1)
+          codesign --verify --deep --strict "$APP"
+          file "$APP/Contents/MacOS/AI Code Usage"
+          file "$APP/Contents/Resources/vendor/codex"
+          test -f dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg
+          test -f dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
+          shasum -a 256 dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
+      - uses: actions/upload-artifact@v4
         with:
-          name: 우리회사_AI운영실_런처_v0.2_Linux검증
-          path: dist/우리회사_AI운영실_런처_v0.2/
-          include-hidden-files: true
-          if-no-files-found: error
-
-      - name: Upload PART 04 module-compatible standalone package
-        uses: actions/upload-artifact@v4
-        with:
-          name: PART04_AI_자동화_진단실_모듈호환_v1.1
-          path: dist/PART04_AI_자동화_진단실_모듈호환_v1.1/
-          include-hidden-files: true
-          if-no-files-found: error
-
-      - name: Upload PART 05 module-compatible standalone package
-        uses: actions/upload-artifact@v4
-        with:
-          name: PART05_업무_접수_분류실_모듈호환_v1.1
-          path: dist/PART05_업무_접수_분류실_모듈호환_v1.1/
-          include-hidden-files: true
+          name: AI-Code-Usage-Mac-M4-v0.5.7-Claude-PTY
+          path: |
+            /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.7.dmg
+            /tmp/src/src/desktop/dist/AI-Code-Usage-Mac-M4-v0.5.7.zip
           if-no-files-found: error
