@@ -1,0 +1,124 @@
+name: Build AI Code Usage Windows v0.6.1
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ai-code-usage-v050.chunk*'
+      - 'tools/patch-ai-code-usage-v055b.py'
+      - 'tools/patch-ai-code-usage-v056-cache.py'
+      - 'tools/patch-ai-code-usage-v057-pty.py'
+      - 'tools/patch-ai-code-usage-v060-claude-oauth.py'
+      - 'tools/patch-ai-code-usage-v061-windows.py'
+      - '.github/workflows/build-ai-code-usage-windows-v061.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force C:\tmp\src | Out-Null
+          @'
+          from pathlib import Path
+          import base64, hashlib, zipfile
+          parts=sorted(Path('.').glob('ai-code-usage-v050.chunk*'))
+          raw=''.join(''.join(p.read_text().split()) for p in parts)
+          data=base64.b64decode(raw)
+          actual=hashlib.sha256(data).hexdigest()
+          assert actual=='1a801110f75301d2e934aa31f57d7c0b8907df0632732ca87d56c5ed6a9fe36c', actual
+          z=Path(r'C:\tmp\source.zip'); z.write_bytes(data)
+          with zipfile.ZipFile(z) as f: f.extractall(r'C:\tmp\src')
+          print('restored', len(data), actual)
+          '@ | python -
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply stable Mac engine and Windows adaptation
+        shell: pwsh
+        run: |
+          python tools/patch-ai-code-usage-v055b.py
+          python tools/patch-ai-code-usage-v056-cache.py
+          python tools/patch-ai-code-usage-v057-pty.py
+          python tools/patch-ai-code-usage-v060-claude-oauth.py
+          python tools/patch-ai-code-usage-v061-windows.py
+          Set-Location C:\tmp\src\src\desktop
+          node --check main.js
+          node --check usage-core.js
+          Select-String -Path main.js,usage-core.js,index.html,package.json -Pattern 'api.anthropic.com/api/oauth/usage|.credentials.json|oauth-2025-04-20|0.6.1'
+
+      - name: Test Claude OAuth and app core
+        shell: pwsh
+        working-directory: C:\tmp\src\src\desktop
+        run: |
+          npm install
+          node --test test/claude-oauth.test.js
+          node --test test/windows-credential.test.js
+          npm test
+
+      - name: Prepare official Codex Windows x64 binary
+        shell: pwsh
+        working-directory: C:\tmp\src\src\desktop
+        run: |
+          New-Item -ItemType Directory -Force vendor | Out-Null
+          $zip = Join-Path $env:RUNNER_TEMP 'codex-windows.zip'
+          $out = Join-Path $env:RUNNER_TEMP 'codex-windows'
+          Invoke-WebRequest -Uri 'https://github.com/openai/codex/releases/latest/download/codex-x86_64-pc-windows-msvc.exe.zip' -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $out -Force
+          $exe = Get-ChildItem $out -Recurse -File | Where-Object { $_.Name -eq 'codex-x86_64-pc-windows-msvc.exe' } | Select-Object -First 1
+          if (-not $exe) { throw 'Official Codex Windows executable not found in archive' }
+          Copy-Item $exe.FullName vendor\codex.exe -Force
+          & .\vendor\codex.exe --version
+
+      - name: Build Windows installer and portable EXE
+        shell: pwsh
+        working-directory: C:\tmp\src\src\desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm run dist:win
+
+      - name: Normalize and verify Windows artifacts
+        shell: pwsh
+        working-directory: C:\tmp\src\src\desktop
+        run: |
+          $root = (Resolve-Path dist).Path
+          $files = Get-ChildItem $root -File -Filter '*.exe'
+          $files | ForEach-Object { Write-Host $_.Name $_.Length }
+          $setup = $files | Where-Object { $_.Name -match 'Setup|setup' } | Sort-Object Length -Descending | Select-Object -First 1
+          $portable = $files | Where-Object { $_.FullName -ne $setup.FullName } | Sort-Object Length -Descending | Select-Object -First 1
+          if (-not $setup) { throw 'Setup EXE not found' }
+          if (-not $portable) { throw 'Portable EXE not found' }
+          $setupOut = Join-Path $root 'AI-Code-Usage-Windows-Setup-v0.6.1.exe'
+          $portableOut = Join-Path $root 'AI-Code-Usage-Windows-Portable-v0.6.1.exe'
+          if ($setup.FullName -ne $setupOut) { Copy-Item $setup.FullName $setupOut -Force }
+          if ($portable.FullName -ne $portableOut) { Copy-Item $portable.FullName $portableOut -Force }
+          @'
+          from pathlib import Path
+          for name in ['AI-Code-Usage-Windows-Setup-v0.6.1.exe','AI-Code-Usage-Windows-Portable-v0.6.1.exe']:
+              p=Path('dist')/name
+              data=p.read_bytes()
+              assert data[:2]==b'MZ', (name,data[:8])
+              assert len(data)>10_000_000, (name,len(data))
+              print(name,len(data))
+          '@ | python -
+          Get-FileHash $setupOut -Algorithm SHA256
+          Get-FileHash $portableOut -Algorithm SHA256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Code-Usage-Windows-v0.6.1
+          path: |
+            C:\tmp\src\src\desktop\dist\AI-Code-Usage-Windows-Setup-v0.6.1.exe
+            C:\tmp\src\src\desktop\dist\AI-Code-Usage-Windows-Portable-v0.6.1.exe
+          if-no-files-found: error
