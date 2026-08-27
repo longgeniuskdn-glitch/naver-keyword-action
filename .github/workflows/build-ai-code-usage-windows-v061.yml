@@ -41,7 +41,7 @@ jobs:
           print('restored', len(data), actual, Path('/tmp/src').resolve())
           '@ | python -
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Test-Path D:\tmp\src\src\desktop\main.js | Should -BeTrue
+          if (-not (Test-Path D:\tmp\src\src\desktop\main.js)) { throw 'Restored desktop source missing' }
 
       - uses: actions/setup-node@v4
         with:
