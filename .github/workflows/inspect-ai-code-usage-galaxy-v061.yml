@@ -1,0 +1,33 @@
+name: Inspect AI Code Usage Galaxy v0.6.1
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ai-code-usage-v050.chunk*'
+      - '.github/workflows/inspect-ai-code-usage-galaxy-v061.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          python3 - <<'PY'
+          import base64, glob, hashlib, re, zipfile
+          raw=''.join(re.sub(r'\s+','',open(f,encoding='utf-8').read()) for f in sorted(glob.glob('ai-code-usage-v050.chunk*')))
+          data=base64.b64decode(raw)
+          assert hashlib.sha256(data).hexdigest()=='1a801110f75301d2e934aa31f57d7c0b8907df0632732ca87d56c5ed6a9fe36c'
+          open('/tmp/source.zip','wb').write(data)
+          with zipfile.ZipFile('/tmp/source.zip') as z:z.extractall('/tmp/src')
+          PY
+      - name: Show Android source map
+        run: |
+          find /tmp/src/src/android -maxdepth 6 -type f | sort
+          echo '--- source files ---'
+          find /tmp/src/src/android/app/src/main -type f \( -name '*.java' -o -name '*.kt' -o -name '*.xml' \) -print0 | xargs -0 -n1 sh -c 'echo ==== $0; sed -n "1,260p" "$0"'
