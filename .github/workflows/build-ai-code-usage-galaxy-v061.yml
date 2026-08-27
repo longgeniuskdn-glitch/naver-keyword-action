@@ -1,0 +1,69 @@
+name: Build AI Code Usage Galaxy v0.6.1
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ai-code-usage-v050.chunk*'
+      - 'tools/patch-ai-code-usage-galaxy-v061.py'
+      - '.github/workflows/build-ai-code-usage-galaxy-v061.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          python3 - <<'PY'
+          import base64,glob,hashlib,re,zipfile
+          raw=''.join(re.sub(r'\s+','',open(f,encoding='utf-8').read()) for f in sorted(glob.glob('ai-code-usage-v050.chunk*')))
+          data=base64.b64decode(raw)
+          actual=hashlib.sha256(data).hexdigest()
+          assert actual=='1a801110f75301d2e934aa31f57d7c0b8907df0632732ca87d56c5ed6a9fe36c',actual
+          open('/tmp/source.zip','wb').write(data)
+          with zipfile.ZipFile('/tmp/source.zip') as z:z.extractall('/tmp/src')
+          print('source',len(data),actual)
+          PY
+      - name: Apply Galaxy v0.6.1 adaptation
+        run: |
+          python3 tools/patch-ai-code-usage-galaxy-v061.py
+          grep -R "v0.6.x\|OAuth\|Galaxy로 전송되지\|versionName = \"0.6.1\"" /tmp/src/src/android/app -n
+          ! grep -R "statusLine JSON" /tmp/src/src/android/app/src/main/java/com/myvision/codexusage/MainActivity.java
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build Galaxy APK
+        working-directory: /tmp/src/src/android
+        run: gradle :app:assembleDebug --stacktrace
+      - name: Verify APK structure
+        run: |
+          APK=/tmp/src/src/android/app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          test $(stat -c%s "$APK") -gt 100000
+          unzip -l "$APK" | grep AndroidManifest.xml
+          unzip -l "$APK" | grep classes.dex
+          unzip -l "$APK" | grep resources.arsc
+          cp "$APK" AI-Code-Usage-Galaxy-v0.6.1.apk
+          sha256sum AI-Code-Usage-Galaxy-v0.6.1.apk | tee AI-Code-Usage-Galaxy-v0.6.1-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AI-Code-Usage-Galaxy-v0.6.1
+          path: |
+            AI-Code-Usage-Galaxy-v0.6.1.apk
+            AI-Code-Usage-Galaxy-v0.6.1-SHA256.txt
+          if-no-files-found: error
