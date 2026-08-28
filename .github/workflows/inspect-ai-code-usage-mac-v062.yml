@@ -21,12 +21,14 @@ jobs:
           python3 tools/patch-ai-code-usage-v056-cache.py
           python3 tools/patch-ai-code-usage-v057-pty.py
           python3 tools/patch-ai-code-usage-v060-claude-oauth.py
-      - name: Show relevant source
+      - name: Show exact relevant source
         run: |
           cd /tmp/src/src/desktop
-          echo '--- tray/menu refs ---'
-          grep -nE "tray|setTitle|updateUi|shortValue|Menu\.build|claude" main.js | head -240
-          echo '--- html Claude refs ---'
-          grep -nE "claude|Claude|fiveHour|sevenDay" index.html | head -220
-          echo '--- package ---'
-          cat package.json
+          echo '--- main 20-90 ---'
+          sed -n '20,90p' main.js
+          echo '--- main 118-250 ---'
+          sed -n '118,250p' main.js
+          echo '--- core OAuth parser ---'
+          grep -n "function normalizeClaudeOauthUsage" -A55 usage-core.js
+          echo '--- html ---'
+          cat index.html
