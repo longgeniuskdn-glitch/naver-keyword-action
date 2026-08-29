@@ -138,7 +138,7 @@ function installClaudeIntegration(){
 }
 function uninstallClaudeIntegration(){state.claudeError='Claude 직접 조회 방식은 별도 설치 항목이 없습니다.';updateUi()}
 '''
-s,n=re.subn(r"function installClaudeIntegration\(\)\{.*?\n\}\nfunction uninstallClaudeIntegration\(\)\{.*?\n\}\n",lambda _m:new_install,s,count=1,flags=re.S)
+s,n=re.subn(r"function installClaudeIntegration\(\)\{.*?\}\s*function uninstallClaudeIntegration\(\)\{.*?\}\s*",lambda _m:new_install,s,count=1,flags=re.S)
 if n!=1: raise SystemExit('installClaudeIntegration block not found')
 
 h=h.replace('Claude Code의 기존 OAuth를 자격증명 파일과 macOS Keychain에서 모두 확인합니다. Max 요금제는 주간 전체와 Fable만 표시합니다.','각 Mac의 Claude Code 로그인을 독립적으로 자동 탐색합니다. 자격증명 파일, CLAUDE_CONFIG_DIR, macOS Keychain의 기본/계정별/보조 세션 항목을 확인합니다. 다른 Mac에서 자동 인식되지 않으면 “Claude 사용량 다시 연결”을 눌러 그 Mac에서 공식 Claude Code 로그인만 완료하세요.')
