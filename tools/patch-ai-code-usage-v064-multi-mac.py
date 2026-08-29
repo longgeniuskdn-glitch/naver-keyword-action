@@ -8,8 +8,6 @@ h=html.read_text(encoding='utf-8')
 
 s=s.replace("const VERSION='0.6.3';","const VERSION='0.6.4';",1)
 
-# Multi-Mac Claude credential discovery. Keep the successful v0.6.0 OAuth usage path,
-# but discover credentials the way different Claude Code/macOS installations actually store them.
 new_candidates=r'''function shellEnvValue(name){
   try{
     const safe=String(name).replace(/[^A-Z0-9_]/g,'');
@@ -73,19 +71,15 @@ function readClaudeOauthCandidates(){
     try{addRaw(fs.readFileSync(file,'utf8'),file)}catch{}
   };
 
-  // Official Claude Code auth precedence includes CLAUDE_CODE_OAUTH_TOKEN.
   if(process.env.CLAUDE_CODE_OAUTH_TOKEN)addRaw(process.env.CLAUDE_CODE_OAUTH_TOKEN,'CLAUDE_CODE_OAUTH_TOKEN (app env)');
   const shellToken=shellEnvValue('CLAUDE_CODE_OAUTH_TOKEN');
   if(shellToken)addRaw(shellToken,'CLAUDE_CODE_OAUTH_TOKEN (login shell)');
 
-  // Config-dir and default file fallbacks.
   if(process.env.CLAUDE_CONFIG_DIR)addFile(path.join(process.env.CLAUDE_CONFIG_DIR,'.credentials.json'));
   if(probe.configDir)addFile(path.join(probe.configDir,'.credentials.json'));
   const shellCfg=shellEnvValue('CLAUDE_CONFIG_DIR');if(shellCfg)addFile(path.join(shellCfg,'.credentials.json'));
   addFile(path.join(os.homedir(),'.claude','.credentials.json'));
 
-  // Current and older Claude Code builds may key the service by the OS account,
-  // and some builds create suffixed secondary-session services.
   if(process.platform==='darwin'){
     const accounts=[];
     try{accounts.push(os.userInfo().username)}catch{}
@@ -113,13 +107,13 @@ function readClaudeOauthCandidates(){
 }
 '''
 
-s,n=re.subn(r"function readClaudeOauthCandidates\(\)\{.*?\n\}\n(?=function claudeHttpJson)",lambda _m:new_candidates,s,count=1,flags=re.S)
-if n!=1: raise SystemExit('readClaudeOauthCandidates block not found')
+# v0.6.2 leaves readClaudeAuthStatus between candidate discovery and claudeHttpJson.
+pat=r"function readClaudeOauthCandidates\(\)\{.*?\n\}\n(?:function readClaudeAuthStatus\(\)\{.*?\n\}\n)?(?=function claudeHttpJson)"
+s,n=re.subn(pat,lambda _m:new_candidates,s,count=1,flags=re.S)
+if n!=1: raise SystemExit('Claude candidate/auth-status block not found')
 
-# Refresh should prefer the auth status already discovered, but keep candidate failover.
 s=s.replace("    const authStatus=readClaudeAuthStatus();\n    const ua='claude-code/'+(discovered.probe.claudeVersion||'2.1.0');","    const authStatus=discovered.authStatus||readClaudeAuthStatus();\n    const ua='claude-code/'+(discovered.probe.claudeVersion||'2.1.0');",1)
 
-# One-click per-Mac recovery: open the official Claude Code login in Terminal, then rescan.
 new_install=r'''function launchClaudeLogin(){
   const claude=findClaudeExecutable();
   if(!claude)throw new Error('Claude Code 실행 파일을 찾지 못했습니다. 먼저 이 Mac에 Claude Code를 설치하거나 Claude 앱의 Code 기능을 한 번 실행하세요.');
@@ -148,7 +142,6 @@ function uninstallClaudeIntegration(){state.claudeError='Claude 직접 조회 �
 s,n=re.subn(r"function installClaudeIntegration\(\)\{.*?\n\}\nfunction uninstallClaudeIntegration\(\)\{.*?\n\}\n",lambda _m:new_install,s,count=1,flags=re.S)
 if n!=1: raise SystemExit('installClaudeIntegration block not found')
 
-# Better user-facing explanation for multi-Mac behavior.
 h=h.replace('Claude Code의 기존 OAuth를 자격증명 파일과 macOS Keychain에서 모두 확인합니다. Max 요금제는 주간 전체와 Fable만 표시합니다.','각 Mac의 Claude Code 로그인을 독립적으로 자동 탐색합니다. 자격증명 파일, CLAUDE_CONFIG_DIR, macOS Keychain의 기본/계정별/보조 세션 항목을 확인합니다. 다른 Mac에서 자동 인식되지 않으면 “Claude 사용량 다시 연결”을 눌러 그 Mac에서 공식 Claude Code 로그인만 완료하세요.')
 
 main.write_text(s,encoding='utf-8');html.write_text(h,encoding='utf-8')
