@@ -107,8 +107,7 @@ function readClaudeOauthCandidates(){
 }
 '''
 
-# v0.6.2 leaves readClaudeAuthStatus between candidate discovery and claudeHttpJson.
-pat=r"function readClaudeOauthCandidates\(\)\{.*?\n\}\n(?:function readClaudeAuthStatus\(\)\{.*?\n\}\n)?(?=function claudeHttpJson)"
+pat=r"function readClaudeOauthCandidates\(\)\{.*?\n\}\s*(?:function readClaudeAuthStatus\(\)\{.*?\n\}\s*)?(?=function claudeHttpJson)"
 s,n=re.subn(pat,lambda _m:new_candidates,s,count=1,flags=re.S)
 if n!=1: raise SystemExit('Claude candidate/auth-status block not found')
 
