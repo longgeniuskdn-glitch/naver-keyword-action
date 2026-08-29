@@ -7,7 +7,7 @@ s=main.read_text(encoding='utf-8')
 h=html.read_text(encoding='utf-8')
 
 s=s.replace("const VERSION='0.6.4';","const VERSION='0.6.5';",1)
-if "const {spawn}=require('child_process');" not in s:
+if not re.search(r"const\s*\{[^}]*\bspawn\b[^}]*\}\s*=\s*require\(['\"]child_process['\"]\)",s):
     s="const {spawn}=require('child_process');\n"+s
 
 new_login=r'''let claudeLoginChild=null;
