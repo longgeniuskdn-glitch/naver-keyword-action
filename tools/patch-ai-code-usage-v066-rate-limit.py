@@ -8,10 +8,10 @@ h=html.read_text(encoding='utf-8')
 
 s=s.replace("const VERSION='0.6.5';","const VERSION='0.6.6';",1)
 
-s=s.replace(
-"let claudeFetchBusy=false;\nlet claudeLastAttempt=0;\nlet claudeNextAllowedAt=0;\nconst CLAUDE_REFRESH_MS=5*60*1000;",
-"let claudeFetchBusy=false;\nlet claudeLastAttempt=0;\nlet claudeNextAllowedAt=0;\nlet claudeRateLimitStreak=0;\nlet claudeCooldownTimer=null;\nconst CLAUDE_REFRESH_MS=5*60*1000;",
-1)
+old_decl="let claudeFetchBusy=false;\nlet claudeLastAttempt=0;\nlet claudeNextAllowedAt=0;\nconst CLAUDE_REFRESH_MS=5*60*1000;"
+new_decl="let claudeFetchBusy=false;\nlet claudeLastAttempt=0;\nlet claudeNextAllowedAt=0;\nlet claudeRateLimitStreak=0;\nlet claudeCooldownTimer=null;\nconst CLAUDE_REFRESH_MS=5*60*1000;"
+if old_decl not in s: raise SystemExit('Claude throttle declarations not found')
+s=s.replace(old_decl,new_decl,1)
 
 helpers=r'''function claudeRetryAfterAt(headers,now=Date.now()){
   const raw=String(headers?.['retry-after']||'').trim();
@@ -45,23 +45,21 @@ function scheduleClaudeCooldownRefresh(){
   claudeCooldownTimer=setTimeout(()=>{claudeCooldownTimer=null;refreshClaude(false)},delay);
 }
 '''
-
 needle="async function refreshClaude(force=false){"
-if helpers not in s:
-    s=s.replace(needle,helpers+"\n"+needle,1)
+if needle not in s: raise SystemExit('refreshClaude not found')
+s=s.replace(needle,helpers+"\n"+needle,1)
 
-s=s.replace("  if(!force && now<claudeNextAllowedAt)return updateUi();",
-"  if(now<claudeNextAllowedAt){\n    state.claudeError='Claude 사용량 서버 요청 제한 대기 중입니다. 기존 값은 정상적으로 유지됩니다. '+claudeCooldownText(now)+' 자동 재조회합니다.';\n    scheduleClaudeCooldownRefresh();\n    return updateUi();\n  }",1)
+old_gate="  if(!force && now<claudeNextAllowedAt)return updateUi();"
+new_gate="  if(now<claudeNextAllowedAt){\n    state.claudeError='Claude 사용량 서버 요청 제한 대기 중입니다. 기존 값은 정상적으로 유지됩니다. '+claudeCooldownText(now)+' 자동 재조회합니다.';\n    scheduleClaudeCooldownRefresh();\n    return updateUi();\n  }"
+if old_gate not in s: raise SystemExit('Claude cooldown gate not found')
+s=s.replace(old_gate,new_gate,1)
 
-s=s.replace("      state.claude=data;state.claudeError=null;claudeNextAllowedAt=0;saveClaudeOauthCache(data);",
-"      state.claude=data;state.claudeError=null;claudeNextAllowedAt=0;claudeRateLimitStreak=0;\n      if(claudeCooldownTimer){clearTimeout(claudeCooldownTimer);claudeCooldownTimer=null;}\n      saveClaudeOauthCache(data);",1)
+old_success="      state.claude=data;state.claudeError=null;claudeNextAllowedAt=0;saveClaudeOauthCache(data);"
+new_success="      state.claude=data;state.claudeError=null;claudeNextAllowedAt=0;claudeRateLimitStreak=0;\n      if(claudeCooldownTimer){clearTimeout(claudeCooldownTimer);claudeCooldownTimer=null;}\n      saveClaudeOauthCache(data);"
+if old_success not in s: raise SystemExit('Claude success block not found')
+s=s.replace(old_success,new_success,1)
 
-old=r'''    }else if(response.status===429){
-      const h=String(response.headers?.['retry-after']||'').trim();const sec=Number(h);
-      claudeNextAllowedAt=Date.now()+((Number.isFinite(sec)&&sec>0?sec:300)*1000);
-      state.claudeError='Claude 사용량 서버가 요청을 제한 중입니다. 기존 값을 유지하고 잠시 후 자동 재시도합니다.';
-'''
-new=r'''    }else if(response.status===429){
+new_429=r'''    }else if(response?.status===429){
       const now429=Date.now();
       claudeRateLimitStreak=Math.min(claudeRateLimitStreak+1,8);
       const serverAt=claudeRetryAfterAt(response.headers,now429);
@@ -70,12 +68,14 @@ new=r'''    }else if(response.status===429){
       state.claudeError='Claude 사용량 서버가 요청을 제한 중입니다. 연결은 정상이며 기존 값을 유지합니다. '+claudeCooldownText(now429)+' 자동 재조회합니다.';
       scheduleClaudeCooldownRefresh();
 '''
-if old not in s: raise SystemExit('429 block not found')
-s=s.replace(old,new,1)
+pat=r"    \}else if\(response\?\.status===429\)\{.*?(?=    \}else\{)"
+s,n=re.subn(pat,lambda _m:new_429,s,count=1,flags=re.S)
+if n!=1: raise SystemExit('429 block not found')
 
-# Make the UI wording explicit so users do not mistake a 429 for a broken login.
-h=h.replace('Claude Code의 기존 로그인 OAuth를 macOS Keychain에서 읽어 사용량 서버를 직접 조회합니다. 별도 Claude 로그인이나 토큰 입력은 필요 없습니다.',
-'Claude Code의 기존 로그인 OAuth를 읽어 사용량 서버를 직접 조회합니다. 서버 요청 제한(429)이 발생하면 로그인은 유지한 채 마지막 정상값을 보여주고, 서버가 허용할 때까지 추가 호출을 막은 뒤 자동 재조회합니다.')
+# Clarify the common multi-Mac help text without changing credential behavior.
+marker='각 Mac의 Claude Code 로그인을 독립적으로 자동 탐색합니다.'
+if marker in h and '429 요청 제한' not in h:
+    h=h.replace(marker,marker+' 429 요청 제한이 발생해도 로그인은 끊지 않고 마지막 정상값을 유지하며 대기시간 이후 자동 재조회합니다.',1)
 
 main.write_text(s,encoding='utf-8');html.write_text(h,encoding='utf-8')
 pkg=json.loads(pkgp.read_text(encoding='utf-8'));pkg['version']='0.6.6';pkg['build']['mac']['artifactName']='AI-Code-Usage-Mac-M4-v${version}.${ext}';pkgp.write_text(json.dumps(pkg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
@@ -86,4 +86,5 @@ assert 'claudeRateLimitStreak' in s
 assert 'if(now<claudeNextAllowedAt)' in s
 assert 'scheduleClaudeCooldownRefresh' in s
 assert 'fallbackMin' in s
+assert 'if(!force && now<claudeNextAllowedAt)' not in s
 print('v0.6.6 Claude rate-limit stability patch applied')
