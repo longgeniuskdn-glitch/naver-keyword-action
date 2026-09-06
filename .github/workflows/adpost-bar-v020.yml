@@ -32,12 +32,10 @@ jobs:
           from pathlib import Path
           import base64, hashlib, os
           parts = sorted(Path('adpost-build/parts').glob('part*.txt'))
-          assert parts, 'source parts missing'
           encoded = ''.join(p.read_text().strip() for p in parts)
           data = base64.b64decode(encoded, validate=True)
           digest = hashlib.sha256(data).hexdigest()
-          expected = os.environ['SOURCE_SHA256']
-          assert digest == expected, f'SHA mismatch: {digest} != {expected}'
+          assert digest == os.environ['SOURCE_SHA256'], digest
           Path('adpost-build/source.zip').write_bytes(data)
           print('source sha256', digest)
           PY
@@ -68,12 +66,10 @@ jobs:
           from pathlib import Path
           import base64, hashlib, os
           parts = sorted(Path('adpost-build/parts').glob('part*.txt'))
-          assert parts, 'source parts missing'
           encoded = ''.join(p.read_text().strip() for p in parts)
           data = base64.b64decode(encoded, validate=True)
           digest = hashlib.sha256(data).hexdigest()
-          expected = os.environ['SOURCE_SHA256']
-          assert digest == expected, f'SHA mismatch: {digest} != {expected}'
+          assert digest == os.environ['SOURCE_SHA256'], digest
           Path('adpost-build/source.zip').write_bytes(data)
           print('source sha256', digest)
           PY
@@ -84,40 +80,56 @@ jobs:
           npm install
           npm test
           npm run check
-      - name: Build arm64 DMG and ZIP
+      - name: Build arm64 app directory
         working-directory: ${{ env.APP_DIR }}
-        run: npm run dist:mac
-      - name: Verify arm64 app bundle
+        run: npm run dist:dir
+      - name: Ad-hoc sign app and verify arm64
         working-directory: ${{ env.APP_DIR }}
         shell: bash
         run: |
           set -euxo pipefail
-          APP=$(find dist -type d -name 'MyVision AdPost Bar.app' | head -1)
-          test -n "$APP"
+          APP="dist/mac-arm64/MyVision AdPost Bar.app"
           BIN="$APP/Contents/MacOS/MyVision AdPost Bar"
-          file "$BIN"
+          test -x "$BIN"
           file "$BIN" | grep -qi arm64
-          codesign --verify --deep --strict "$APP" || true
-      - name: Verify DMG mount and app copy
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+      - name: Create Mac installer DMG and ZIP
         working-directory: ${{ env.APP_DIR }}
         shell: bash
         run: |
           set -euxo pipefail
-          DMG=$(find dist -maxdepth 1 -name '*.dmg' | head -1)
-          test -n "$DMG"
+          APP="dist/mac-arm64/MyVision AdPost Bar.app"
+          ROOT="$RUNNER_TEMP/adpost-dmg-root"
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT"
+          ditto "$APP" "$ROOT/MyVision AdPost Bar.app"
+          ln -s /Applications "$ROOT/Applications"
+          hdiutil create -volname "MyVision AdPost Bar" -srcfolder "$ROOT" -ov -format UDZO "dist/MyVision-AdPost-Bar-0.2.0-arm64.dmg"
+          ditto -c -k --keepParent "$APP" "dist/MyVision-AdPost-Bar-0.2.0-arm64.zip"
+      - name: Verify DMG mount and install copy
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          DMG="dist/MyVision-AdPost-Bar-0.2.0-arm64.dmg"
           MOUNT="$RUNNER_TEMP/adpost-dmg"
-          DEST="$RUNNER_TEMP/Applications"
+          DEST="$RUNNER_TEMP/Applications-test"
           mkdir -p "$MOUNT" "$DEST"
           hdiutil attach "$DMG" -nobrowse -mountpoint "$MOUNT"
           test -d "$MOUNT/MyVision AdPost Bar.app"
+          test -L "$MOUNT/Applications"
           ditto "$MOUNT/MyVision AdPost Bar.app" "$DEST/MyVision AdPost Bar.app"
-          test -x "$DEST/MyVision AdPost Bar.app/Contents/MacOS/MyVision AdPost Bar"
+          BIN="$DEST/MyVision AdPost Bar.app/Contents/MacOS/MyVision AdPost Bar"
+          file "$BIN" | grep -qi arm64
+          codesign --verify --deep --strict --verbose=2 "$DEST/MyVision AdPost Bar.app"
           hdiutil detach "$MOUNT"
+          shasum -a 256 "$DMG" "dist/MyVision-AdPost-Bar-0.2.0-arm64.zip"
       - name: Upload Mac installer
         uses: actions/upload-artifact@v4
         with:
-          name: MyVision-AdPost-Bar-v0.2.0-macOS-arm64
+          name: MyVision-AdPost-Bar-v0.2.0-macOS-arm64-signed
           path: |
-            ${{ env.APP_DIR }}/dist/*.dmg
-            ${{ env.APP_DIR }}/dist/*.zip
+            ${{ env.APP_DIR }}/dist/MyVision-AdPost-Bar-0.2.0-arm64.dmg
+            ${{ env.APP_DIR }}/dist/MyVision-AdPost-Bar-0.2.0-arm64.zip
           if-no-files-found: error
