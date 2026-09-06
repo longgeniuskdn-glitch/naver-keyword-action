@@ -1,0 +1,134 @@
+name: MyVision AdPost Bar v0.3.0 Live Build
+
+on:
+  push:
+    branches: [adpost-bar-v030-live]
+    paths:
+      - 'adpost-v030/**'
+      - '.github/workflows/adpost-bar-v030.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA256: 409e91ed57b9a808d148dda1b3ab1134139220c42b776c8b2ee21e2457d8554a
+  APP_DIR: adpost-v030/work/MyVision-AdPost-Bar-v0.3.0
+
+jobs:
+  linux-core:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rebuild source archive
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p adpost-v030/work
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, os
+          parts = sorted(Path('adpost-v030/parts').glob('part*.txt'))
+          assert parts, 'source parts missing'
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          data = base64.b64decode(encoded, validate=True)
+          digest = hashlib.sha256(data).hexdigest()
+          assert digest == os.environ['SOURCE_SHA256'], f'{digest} != {os.environ["SOURCE_SHA256"]}'
+          Path('adpost-v030/source.zip').write_bytes(data)
+          print('source sha256', digest)
+          PY
+          unzip -q adpost-v030/source.zip -d adpost-v030/work
+      - name: Install and test live integration core
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          npm install
+          npm test
+          npm run check
+          npm run linux:test
+
+  macos-arm64-dmg:
+    runs-on: macos-14
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rebuild source archive
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p adpost-v030/work
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, os
+          parts = sorted(Path('adpost-v030/parts').glob('part*.txt'))
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          data = base64.b64decode(encoded, validate=True)
+          digest = hashlib.sha256(data).hexdigest()
+          assert digest == os.environ['SOURCE_SHA256'], digest
+          Path('adpost-v030/source.zip').write_bytes(data)
+          print('source sha256', digest)
+          PY
+          unzip -q adpost-v030/source.zip -d adpost-v030/work
+      - name: Install and test
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          npm install
+          npm test
+          npm run check
+      - name: Build arm64 app directory
+        working-directory: ${{ env.APP_DIR }}
+        run: npm run dist:dir
+      - name: Ad-hoc sign app and verify arm64
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APP=$(find dist -type d -name 'MyVision AdPost Bar.app' | head -1)
+          test -n "$APP"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
+          BIN="$APP/Contents/MacOS/MyVision AdPost Bar"
+          file "$BIN"
+          file "$BIN" | grep -qi arm64
+      - name: Create Mac installer DMG and ZIP
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APP=$(find dist -type d -name 'MyVision AdPost Bar.app' | head -1)
+          STAGE="$RUNNER_TEMP/adpost-stage-v030"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          ditto "$APP" "$STAGE/MyVision AdPost Bar.app"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname 'MyVision AdPost Bar 0.3.0' -srcfolder "$STAGE" -ov -format UDZO 'dist/MyVision-AdPost-Bar-0.3.0-arm64.dmg'
+          ditto -c -k --sequesterRsrc --keepParent "$APP" 'dist/MyVision-AdPost-Bar-0.3.0-arm64.zip'
+      - name: Verify DMG mount and install copy
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          DMG='dist/MyVision-AdPost-Bar-0.3.0-arm64.dmg'
+          MOUNT="$RUNNER_TEMP/adpost-dmg-v030"
+          DEST="$RUNNER_TEMP/Applications-v030"
+          mkdir -p "$MOUNT" "$DEST"
+          hdiutil attach "$DMG" -nobrowse -mountpoint "$MOUNT"
+          test -d "$MOUNT/MyVision AdPost Bar.app"
+          ditto "$MOUNT/MyVision AdPost Bar.app" "$DEST/MyVision AdPost Bar.app"
+          codesign --verify --deep --strict "$DEST/MyVision AdPost Bar.app"
+          test -x "$DEST/MyVision AdPost Bar.app/Contents/MacOS/MyVision AdPost Bar"
+          hdiutil detach "$MOUNT"
+      - name: Upload Mac installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyVision-AdPost-Bar-v0.3.0-macOS-arm64-live
+          path: |
+            ${{ env.APP_DIR }}/dist/MyVision-AdPost-Bar-0.3.0-arm64.dmg
+            ${{ env.APP_DIR }}/dist/MyVision-AdPost-Bar-0.3.0-arm64.zip
+          if-no-files-found: error
