@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 env:
-  SOURCE_B64: adpost-build/MyVision-AdPost-Bar-v0.2.0-source.zip.b64
   APP_DIR: adpost-build/work/MyVision-AdPost-Bar-v0.2.0
+  SOURCE_SHA256: 938f691fe31c6bf60b90717d1b12d8d7b59e620e4f8385048878da904259b3f5
 
 jobs:
   linux-core:
@@ -23,12 +23,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Decode source
+      - name: Rebuild source archive
         shell: bash
         run: |
           set -euxo pipefail
           mkdir -p adpost-build/work
-          base64 --decode "$SOURCE_B64" > adpost-build/source.zip
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, os
+          parts = sorted(Path('adpost-build/parts').glob('part*.txt'))
+          assert parts, 'source parts missing'
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          data = base64.b64decode(encoded, validate=True)
+          digest = hashlib.sha256(data).hexdigest()
+          expected = os.environ['SOURCE_SHA256']
+          assert digest == expected, f'SHA mismatch: {digest} != {expected}'
+          Path('adpost-build/source.zip').write_bytes(data)
+          print('source sha256', digest)
+          PY
           unzip -q adpost-build/source.zip -d adpost-build/work
       - name: Install and test
         working-directory: ${{ env.APP_DIR }}
@@ -47,12 +59,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Decode source
+      - name: Rebuild source archive
         shell: bash
         run: |
           set -euxo pipefail
           mkdir -p adpost-build/work
-          base64 --decode "$SOURCE_B64" > adpost-build/source.zip
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, os
+          parts = sorted(Path('adpost-build/parts').glob('part*.txt'))
+          assert parts, 'source parts missing'
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          data = base64.b64decode(encoded, validate=True)
+          digest = hashlib.sha256(data).hexdigest()
+          expected = os.environ['SOURCE_SHA256']
+          assert digest == expected, f'SHA mismatch: {digest} != {expected}'
+          Path('adpost-build/source.zip').write_bytes(data)
+          print('source sha256', digest)
+          PY
           unzip -q adpost-build/source.zip -d adpost-build/work
       - name: Install and test
         working-directory: ${{ env.APP_DIR }}
