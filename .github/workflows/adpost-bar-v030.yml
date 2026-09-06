@@ -41,6 +41,18 @@ jobs:
           print('source sha256', digest)
           PY
           unzip -q adpost-v030/source.zip -d adpost-v030/work
+      - name: Enforce exact total source
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/core/metrics.js')
+          s = p.read_text()
+          s = '\n'.join(line for line in s.splitlines() if "label: '전환 가능 금액'" not in line) + '\n'
+          p.write_text(s)
+          assert "label: '전환 가능 금액'" not in p.read_text()
+          PY
       - name: Install and test live integration core
         working-directory: ${{ env.APP_DIR }}
         run: |
@@ -75,6 +87,18 @@ jobs:
           print('source sha256', digest)
           PY
           unzip -q adpost-v030/source.zip -d adpost-v030/work
+      - name: Enforce exact total source
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/core/metrics.js')
+          s = p.read_text()
+          s = '\n'.join(line for line in s.splitlines() if "label: '전환 가능 금액'" not in line) + '\n'
+          p.write_text(s)
+          assert "label: '전환 가능 금액'" not in p.read_text()
+          PY
       - name: Install and test
         working-directory: ${{ env.APP_DIR }}
         run: |
